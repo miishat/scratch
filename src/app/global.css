@@ -9,7 +9,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .primary-button:hover { border-color: var(--text); background: var(--action); }
 .app-header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .header-inner { max-width: 1120px; padding: 16px 32px; margin: auto; display: flex; align-items: center; gap: 16px; }
-.wordmark { font: 600 30px/1.2 'Source Serif 4', serif; color: var(--text); text-decoration: none; margin-right: auto; }
+.wordmark { display: inline-flex; align-items: center; min-height: 44px; font: 600 30px/1.2 'Source Serif 4', serif; color: var(--text); text-decoration: none; margin-right: auto; }
 .header-search { width: min(300px, 35%); min-width: 0; }
 .header-add-wrap { position: relative; }
 .add-menu { position: absolute; z-index: 5; right: 0; top: 100%; margin-top: 4px; min-width: 180px; display: grid; gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
