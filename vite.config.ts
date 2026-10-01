@@ -32,6 +32,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,woff2,png}'],
         globIgnores: ['licenses/**'],
         navigateFallback: 'index.html',
+        // Shipped license files are plain files, never the app shell (matches under any sub-path).
+        navigateFallbackDenylist: [/\/licenses\//],
         cleanupOutdatedCaches: true,
         // First install claims the open page so it is offline-ready without a reload.
         // Updates still wait for the page to approve activation.

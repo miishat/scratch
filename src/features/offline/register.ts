@@ -34,15 +34,19 @@ export interface OfflineStore {
 }
 
 export interface OfflineEnvironment {
-  // Calls back once when a different worker takes control of this page.
-  onControllerChange: (callback: () => void) => void
+  // Calls back once when a different worker takes control of this page. Returns a
+  // function that stops listening.
+  onControllerChange: (callback: () => void) => () => void
   reload: () => void
   // How long to wait for the new worker to take control before giving up.
   activationTimeoutMs: number
 }
 
 const browserEnvironment: OfflineEnvironment = {
-  onControllerChange: (callback) => navigator.serviceWorker.addEventListener('controllerchange', callback, { once: true }),
+  onControllerChange: (callback) => {
+    navigator.serviceWorker.addEventListener('controllerchange', callback, { once: true })
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', callback)
+  },
   reload: () => window.location.reload(),
   activationTimeoutMs: 10000,
 }
@@ -89,13 +93,19 @@ export function createOfflineStore(environment: OfflineEnvironment = browserEnvi
       if (!updateWorker) throw new Error('No worker to update.')
       const activate = updateWorker
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('The update did not activate.')), environment.activationTimeoutMs)
-        environment.onControllerChange(() => {
+        // A late takeover after giving up must not reload the page unasked.
+        let stopListening = () => {}
+        const timer = setTimeout(() => {
+          stopListening()
+          reject(new Error('The update did not activate.'))
+        }, environment.activationTimeoutMs)
+        stopListening = environment.onControllerChange(() => {
           clearTimeout(timer)
           resolve()
         })
         activate(false).catch((cause: unknown) => {
           clearTimeout(timer)
+          stopListening()
           reject(cause)
         })
       })

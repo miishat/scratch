@@ -50,7 +50,7 @@ describe('offline registration state', () => {
 
   it('notifies subscribers and flags a waiting update, activating only when asked', async () => {
     const reload = vi.fn()
-    const environment: OfflineEnvironment = { onControllerChange: (callback) => { queueMicrotask(callback) }, reload, activationTimeoutMs: 100 }
+    const environment: OfflineEnvironment = { onControllerChange: (callback) => { queueMicrotask(callback); return () => {} }, reload, activationTimeoutMs: 100 }
     const store = createOfflineStore(environment)
     const fake = fakeRegister()
     const listener = vi.fn()
@@ -69,7 +69,7 @@ describe('offline registration state', () => {
   it('reloads only after the new worker takes control, and gives up if it never does', async () => {
     const reload = vi.fn()
     let takeControl = () => {}
-    const environment: OfflineEnvironment = { onControllerChange: (callback) => { takeControl = callback }, reload, activationTimeoutMs: 20 }
+    const environment: OfflineEnvironment = { onControllerChange: (callback) => { takeControl = callback; return () => {} }, reload, activationTimeoutMs: 20 }
     const store = createOfflineStore(environment)
     const fake = fakeRegister()
     store.start(fake.register, true)
@@ -81,10 +81,32 @@ describe('offline registration state', () => {
     expect(reload).toHaveBeenCalledTimes(1)
 
     reload.mockClear()
-    const stuck = createOfflineStore({ ...environment, onControllerChange: () => {} })
+    const stuck = createOfflineStore({ ...environment, onControllerChange: () => () => {} })
     stuck.start(fake.register, true)
     await expect(stuck.activateUpdate()).rejects.toThrow()
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('stops listening after the timeout so a late controller change never reloads', async () => {
+    vi.useFakeTimers()
+    try {
+      const reload = vi.fn()
+      let listener: (() => void) | null = null
+      const environment: OfflineEnvironment = {
+        onControllerChange: (callback) => { listener = callback; return () => { listener = null } },
+        reload,
+        activationTimeoutMs: 1000,
+      }
+      const store = createOfflineStore(environment)
+      store.start(fakeRegister().register, true)
+      const outcome = expect(store.activateUpdate()).rejects.toThrow()
+      await vi.advanceTimersByTimeAsync(1001)
+      await outcome
+      expect(listener).toBeNull()
+      expect(reload).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('starts only once', () => {

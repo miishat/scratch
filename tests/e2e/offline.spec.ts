@@ -231,3 +231,49 @@ test('cache privacy: caches hold only static shell files', async ({ context }, t
     for (const secret of [SECRET_TEXT, NOTE_TITLE, NOTE_BODY, PASSPHRASE]) expect(entry.text).not.toContain(secret)
   }
 })
+
+test('license files are served as files, not replaced by the app shell', async ({ context }) => {
+  const page = await warm(context)
+  // A navigation is what the worker's app-shell fallback would otherwise answer.
+  const license = await context.newPage()
+  await license.goto('/licenses/source-sans-3-OFL.txt')
+  await expect(license.locator('body')).toContainText('SIL OPEN FONT LICENSE')
+  await expect(license.locator('#root')).toHaveCount(0)
+  await page.close()
+})
+
+test.describe('phone width', () => {
+  test.use({ viewport: { width: 360, height: 640 } })
+
+  test('the update prompt inside the editor is keyboard reachable and never covers Save', async ({ context, baseURL }) => {
+    const host = await startUpdatableHost(baseURL!)
+    try {
+      const page = await warm(context, host.url)
+      await addNoteFromHeader(page)
+      await page.getByRole('textbox', { name: 'Note body' }).fill('Kept while updating')
+      await stageUpdate(host, page)
+      const dialog = page.getByRole('dialog', { name: 'New note' })
+      const update = dialog.getByRole('button', { name: 'Update now' })
+      await expect(update).toBeVisible()
+      const banner = await dialog.locator('.update-notice').boundingBox()
+      const save = await dialog.getByRole('button', { name: 'Save', exact: true }).boundingBox()
+      expect(banner && save && (banner.y + banner.height <= save.y || save.y + save.height <= banner.y)).toBe(true)
+      expect(banner!.x).toBeGreaterThanOrEqual(0)
+      expect(banner!.x + banner!.width).toBeLessThanOrEqual(360)
+      for (let i = 0; i < 12; i++) {
+        if (await update.evaluate((element) => element === document.activeElement)) break
+        await page.keyboard.press('Tab')
+      }
+      await expect(update).toBeFocused()
+      await page.keyboard.press('Enter')
+      const confirm = page.getByRole('dialog', { name: 'Update Scratch?' })
+      await expect(confirm).toBeVisible()
+      await confirm.getByRole('button', { name: 'Cancel' }).click()
+      await expect(page.getByRole('textbox', { name: 'Note body' })).toBeFocused()
+      await expect(page.getByRole('textbox', { name: 'Note body' })).toHaveValue('Kept while updating')
+      expect(await hasWaiting(page)).toBe(true)
+    } finally {
+      await host.close()
+    }
+  })
+})

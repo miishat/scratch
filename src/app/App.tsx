@@ -62,7 +62,7 @@ type AppProps = Pick<ShellProps, 'children'> & Pick<CollectionViewProps, 'onAddN
 export function App(props: AppProps) {
   const missing = missingRequiredApis()
   if (missing.length) return <UnsupportedBrowserScreen missingApis={missing} />
-  return <VaultProvider><VaultGate {...props} /><UpdateNotice /></VaultProvider>
+  return <VaultProvider><UpdateNotice /><VaultGate {...props} /></VaultProvider>
 }
 
 // The library is only mounted while a vault session exists, so nothing decrypted
