@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app/App'
 import { ThemeProvider } from '../src/features/theme/ThemeProvider'
+import { BackupDialog } from '../src/features/backup/BackupDialog'
+import { VaultProvider } from '../src/features/vault/VaultProvider'
 import { commitImport, prepareImport, writeBackup } from '../src/features/backup/backup'
 import { createVault, encryptItem } from '../src/features/vault/crypto'
 import type { CreatedVault, VaultSession } from '../src/features/vault/types'
@@ -403,9 +405,77 @@ describe('stale tab recovery export', () => {
     // The draft text is still in the (hidden) editor.
     expect(screen.getByRole('textbox', { name: 'Note body', hidden: true })).toHaveValue('x')
   })
+
+  it('restores the editor after Keep editing even when the tab was hidden past sixty seconds', async () => {
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn((blob: Blob) => { blobs.push(blob); return 'blob:late' }), revokeObjectURL: vi.fn() }))
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    const notify = await openStaleTab(user)
+    await screen.findByRole('button', { name: 'Keep editing' })
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+      act(() => { vi.advanceTimersByTime(61_000) })
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    } finally {
+      vi.useRealTimers()
+      delete (document as unknown as Record<string, unknown>).hidden
+      delete (document as unknown as Record<string, unknown>).visibilityState
+    }
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    const body = screen.getByRole('textbox', { name: 'Note body' })
+    expect(body).toBeVisible()
+    expect(body).toHaveValue('x')
+    await user.type(screen.getByLabelText('Title'), 'Fixed title')
+
+    notify()
+    await user.click(await screen.findByRole('button', { name: 'Export backup' }))
+    expect(await screen.findByText('Backup exported.')).toBeInTheDocument()
+    const recovered = await prepareImport(blobs[0], PHRASE)
+    expect(recovered.ok && recovered.prepared.itemCount).toBe(2)
+  })
+
+  it('saving after Keep editing shows the replaced-library panel and writes nothing to the new library', async () => {
+    const user = userEvent.setup()
+    await openStaleTab(user)
+    const afterReplace = await stored()
+    await user.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    await user.type(screen.getByLabelText('Title'), 'Fixed title')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('heading', { name: 'This library was replaced' })).toBeInTheDocument()
+    expect(await stored()).toEqual(afterReplace)
+  })
 })
 
 describe('replacement outlives its dialog', () => {
+  it('does not report success when the install was refused because the vault locked', async () => {
+    await seedLibrary()
+    const base = await stored()
+    const prepared = await prepareImport(await backupFile(), BACKUP_PHRASE)
+    if (!prepared.ok) throw new Error(prepared.message)
+    const onImported = vi.fn()
+    const user = userEvent.setup()
+    // The provider is locked, so installing a session must be refused.
+    render(<VaultProvider><BackupDialog
+      replace={{ session: sessionA, currentBase: () => ({ generation: base.meta.generation, revision: base.meta.revision }) }}
+      onClose={() => undefined}
+      onImported={onImported}
+    /></VaultProvider>)
+    await screen.findByLabelText('Backup file')
+    await chooseAndReview(user, await backupFile(), BACKUP_PHRASE)
+    await screen.findByText('This backup contains 2 items.', undefined, { timeout: 30000 })
+    await user.click(screen.getByRole('button', { name: 'Replace library' }))
+    await waitFor(async () => expect((await stored()).header.vaultId).toBe(vaultB.header.vaultId))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/unlock/i)
+    expect(onImported).not.toHaveBeenCalled()
+  })
+
   it('installs the imported session even when the dialog unmounts during the commit', async () => {
     await seedLibrary()
     let release: () => void = () => undefined

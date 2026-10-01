@@ -95,8 +95,17 @@ export function BackupDialog({ replace, onClose, onImported }: Props) {
       }
       return
     }
-    installSession(result.session, replace ? replace.session : null)
-    onImported()
+    if (installSession(result.session, replace ? replace.session : null)) {
+      onImported()
+      return
+    }
+    // Scratch locked (or the session changed) while the library was being replaced.
+    // The library is replaced; no session is installed and nothing is announced.
+    if (!alive.current) return
+    setPrepared(null)
+    setFile(null)
+    setError('The library was replaced, but Scratch locked first. Unlock with the backup passphrase to open it.')
+    setStage('choose')
   }
 
   async function exportCurrent() {
