@@ -109,3 +109,18 @@ Locking is per tab. A reload always begins locked; another unlocked tab holds
 its own session and timer. Exported backups retain the passphrase they were
 exported with, so changing the passphrase does not change an old backup's
 passphrase.
+
+## Session and locking
+
+An unlocked session exists only in memory. Locking is current-tab only: it
+releases this tab's data key and decrypted state and does not lock other tabs or
+change stored data. A session locks after ten minutes without keyboard, pointer,
+or touch activity, and after sixty seconds with the tab hidden; secrets are
+concealed as soon as the tab is hidden, and a tab that resumes past either
+deadline locks before showing content. An unsaved note draft is sealed into a
+draft-purpose envelope held in memory only, and is offered back only after
+unlocking the same vault and generation. If sealing fails, the tab stays
+concealed and offers Save or Discard instead of reporting Locked. When another
+tab replaces the vault or its header, a tab without a dirty draft releases its
+session; a tab with a dirty draft keeps it concealed until the user exports a
+backup or discards the draft.

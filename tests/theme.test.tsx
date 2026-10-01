@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useTheme, ThemeProvider } from '../src/features/theme/ThemeProvider'
 import { resolveTheme, readThemePreference } from '../src/features/theme/theme'
-import { App } from '../src/app/App'
+import { App, AppShell } from '../src/app/App'
 import { Dialog } from '../src/components/Dialog'
 import { missingRequiredApis } from '../src/features/support/requiredApis'
 import { StorageUnavailableScreen, UnsupportedBrowserScreen } from '../src/features/support/SupportScreens'
@@ -79,7 +79,7 @@ describe('theme', () => {
 
   it('renders the shell with system theme when storage throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
-    render(<ThemeProvider><App /></ThemeProvider>)
+    render(<ThemeProvider><AppShell /></ThemeProvider>)
     expect(screen.getByRole('heading', { name: 'A place for the little things.' })).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     vi.restoreAllMocks()
@@ -171,7 +171,7 @@ it('renders an SVG close icon with an accessible name', async () => {
 })
 
 it('exposes reachable Add and Settings controls in the narrow shell', async () => {
-  render(<ThemeProvider><App /></ThemeProvider>)
+  render(<ThemeProvider><AppShell /></ThemeProvider>)
   expect(screen.getByRole('button', { name: 'Add' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Settings' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Add note' })).toBeVisible()

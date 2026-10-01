@@ -59,6 +59,8 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
   const epoch = useRef(0)
   // Set by clearUnlockedState while the session is still live; only a new session
   // resets it, so remote changes cannot restore a snapshot after an explicit clear.
+  // Contract: a caller that clears must follow it with a real lock (session null),
+  // because this tab will not reload the library again for the same session.
   const cleared = useRef(false)
 
   // Reset decrypted state during render whenever the session identity changes,

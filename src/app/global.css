@@ -29,6 +29,12 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .dialog-heading h2 { margin: 0 0 16px; }
 .support-screen { max-width: 720px; margin: 10vh auto; padding: 32px; }
+.vault-form { display: grid; gap: 8px; max-width: 420px; }
+.vault-form input { min-width: 0; height: 44px; border: 1px solid var(--focus); border-radius: 8px; color: var(--text); background: var(--page-bg); padding: 8px 12px; }
+.vault-form label { font-weight: 600; margin-top: 8px; }
+.form-error { color: var(--text); border-left: 4px solid var(--focus); padding-left: 12px; margin: 8px 0 0; }
+.form-hint { color: var(--muted); margin: 8px 0 0; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 @media (max-width: 959px) {
   .header-inner, .app-content { padding: 24px; }
