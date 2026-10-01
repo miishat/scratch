@@ -39,6 +39,13 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function GuardProbe({ guard }: { guard: NavigationGuard }) {
+  const { registerGuard } = useNavigation()
+  useEffect(() => registerGuard(guard), [guard, registerGuard])
+  return null
+}
+
+
 describe('route parsing', () => {
   it('formats and parses only id based routes', () => {
     expect(formatRoute({ collectionId: null })).toBe('#/')
@@ -222,7 +229,7 @@ describe('tiles', () => {
     expect(tile?.querySelector('svg')).toBeInTheDocument()
   })
 
-  it('keeps 80 cluster and unbroken titles inside the tile with a full label', () => {
+  it('labels long titles in full and has the clamp and wrap CSS rules (CSS presence only, not a layout check)', () => {
     const family = '\u{1F468}‍\u{1F469}‍\u{1F467}'.repeat(80)
     const unbroken = 'W'.repeat(80)
     const items = [makeCollection({ title: family, color: 'clay' }), makeNote({ title: unbroken, body: 'b' })]
@@ -283,19 +290,29 @@ describe('empty and creation entry points', () => {
     expect(onAddCollection).toHaveBeenCalledWith(parent.id)
   })
 
-  it('shows the library empty state at the root', () => {
-    render(<Harness items={[]} onAddNote={vi.fn()} />)
+  it('shows no dead buttons in the root empty state without callbacks', () => {
+    render(<Harness items={[]} />)
     expect(screen.getByRole('heading', { name: 'A place for the little things.' })).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('renders and fires only the root empty-state actions that are wired', async () => {
+    const user = userEvent.setup()
+    const onAddNote = vi.fn()
+    const { unmount } = render(<Harness items={[]} onAddNote={onAddNote} />)
+    expect(screen.queryByRole('button', { name: 'Add collection' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    expect(onAddNote).toHaveBeenCalledWith(null)
+    unmount()
+    const onAddCollection = vi.fn()
+    render(<Harness items={[]} onAddCollection={onAddCollection} />)
+    expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add collection' }))
+    expect(onAddCollection).toHaveBeenCalledWith(null)
   })
 })
 
 describe('dirty editor guard', () => {
-  function GuardProbe({ guard }: { guard: NavigationGuard }) {
-    const { registerGuard } = useNavigation()
-    useEffect(() => registerGuard(guard), [guard, registerGuard])
-    return null
-  }
-
   it('blocks tile navigation while the guard refuses, then allows it', async () => {
     const user = userEvent.setup()
     const guard = vi.fn<NavigationGuard>(() => false)
@@ -371,5 +388,80 @@ describe('Add menu', () => {
   it('disables Add while no creation action is wired', () => {
     render(<AppHeader />)
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+  })
+})
+
+describe('navigation API', () => {
+  const captured: { current: ReturnType<typeof useNavigation> | null } = { current: null }
+  const api = new Proxy({} as ReturnType<typeof useNavigation>, {
+    get: (_, key) => captured.current?.[key as keyof ReturnType<typeof useNavigation>],
+  })
+  function Capture() {
+    const navigation = useNavigation()
+    useEffect(() => { captured.current = navigation })
+    return null
+  }
+  const note = `#/c/${ids.apiTokens}/n/${ids.openai}`
+
+  it('navigateBack from a note on a fresh tab goes to the note collection', async () => {
+    window.history.replaceState(null, '', note)
+    render(<Harness items={fixtureLibrary}><Capture /></Harness>)
+    await act(async () => { api.navigateBack() })
+    expect(window.location.hash).toBe(`#/c/${ids.apiTokens}`)
+  })
+
+  it('navigateBack from a collection on a fresh tab goes to the parent, or home', async () => {
+    window.history.replaceState(null, '', `#/c/${ids.reminders}`)
+    const { unmount } = render(<Harness items={fixtureLibrary}><Capture /></Harness>)
+    await act(async () => { api.navigateBack() })
+    expect(window.location.hash).toBe(`#/c/${ids.personal}`)
+    unmount()
+    window.history.replaceState(null, '', `#/c/${ids.apiTokens}`)
+    render(<Harness items={fixtureLibrary}><Capture /></Harness>)
+    await act(async () => { api.navigateBack() })
+    expect(window.location.hash).toBe('#/')
+  })
+
+  it('navigateBack mid-history uses history back', async () => {
+    render(<Harness items={fixtureLibrary}><Capture /></Harness>)
+    await act(async () => { await api.openCollection(ids.apiTokens) })
+    await act(async () => { await api.openNote(ids.apiTokens, ids.openai) })
+    expect(window.location.hash).toBe(note)
+    await traverse(() => api.navigateBack())
+    expect(window.location.hash).toBe(`#/c/${ids.apiTokens}`)
+    await act(async () => { await api.closeNote() })
+    expect(window.location.hash).toBe(`#/c/${ids.apiTokens}`)
+  })
+
+  it('closeNote returns to the note collection', async () => {
+    window.history.replaceState(null, '', note)
+    render(<Harness items={fixtureLibrary}><Capture /></Harness>)
+    await act(async () => { await api.closeNote() })
+    expect(window.location.hash).toBe(`#/c/${ids.apiTokens}`)
+  })
+
+  it('navigateBack respects a refusing guard', async () => {
+    window.history.replaceState(null, '', note)
+    render(<Harness items={fixtureLibrary}><Capture /><GuardProbe guard={() => false} /></Harness>)
+    await act(async () => { api.navigateBack(); await new Promise((r) => setTimeout(r, 20)) })
+    expect(window.location.hash).toBe(note)
+  })
+
+  it('handles a real popstate after a compensating history.go turned out to be a no-op', async () => {
+    const user = userEvent.setup()
+    let allow = false
+    render(<Harness items={fixtureLibrary}><GuardProbe guard={() => allow} /></Harness>)
+    allow = true
+    await user.click(screen.getByRole('link', { name: 'API Tokens, 2 items' }))
+    await user.click(screen.getByRole('link', { name: /^OpenAI/ }))
+    allow = false
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => undefined)
+    await traverse(() => window.history.back())
+    expect(go).toHaveBeenCalled()
+    go.mockRestore()
+    allow = true
+    await traverse(() => window.history.back())
+    expect(window.location.hash).toBe('#/')
+    expect(screen.getByRole('link', { name: 'Personal, 1 item' })).toBeInTheDocument()
   })
 })

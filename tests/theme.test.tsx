@@ -171,7 +171,7 @@ it('renders an SVG close icon with an accessible name', async () => {
 })
 
 it('exposes reachable Add and Settings controls in the narrow shell', async () => {
-  render(<ThemeProvider><AppShell /></ThemeProvider>)
+  render(<ThemeProvider><AppShell onAddNote={() => {}} onAddCollection={() => {}} /></ThemeProvider>)
   expect(screen.getByRole('button', { name: 'Add' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Settings' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Add note' })).toBeVisible()

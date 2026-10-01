@@ -26,7 +26,8 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
   const index = useRef(readIndex(window.history.state) ?? 0)
   // Set when the provider itself undoes a refused traversal, so the popstate that
   // undoing causes is not treated as a new navigation.
-  const suppressPop = useRef(false)
+  // The index the provider expects to land on after undoing a refused traversal.
+  const suppressPop = useRef<{ landing: number, timer: ReturnType<typeof setTimeout> } | null>(null)
   // Parent links remembered from earlier snapshots, so a deleted collection can
   // still be walked up. Holds ids only.
   const [known, setKnown] = useState(() => new Map<ItemId, ItemId | null>())
@@ -75,10 +76,18 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
 
   useEffect(() => {
     async function onPop(event: PopStateEvent) {
-      if (suppressPop.current) { suppressPop.current = false; return }
       const target = readIndex(event.state)
+      const pending = suppressPop.current
+      if (pending) {
+        // Only the undo traversal is swallowed. Anything else is a real event,
+        // even if the undo never happened.
+        clearTimeout(pending.timer)
+        suppressPop.current = null
+        if (target === pending.landing) return
+      }
       if (guards.current.size > 0 && !(await runGuards())) {
-        suppressPop.current = true
+        const landing = index.current
+        suppressPop.current = { landing, timer: setTimeout(() => { suppressPop.current = null }, 1000) }
         // Undo the traversal. An entry we did not create (a typed hash) has no
         // index; stepping back returns to the entry we were on.
         if (target === null) window.history.back()
@@ -89,7 +98,11 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
       setRaw(parseHash(window.location.hash))
     }
     window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      if (suppressPop.current) clearTimeout(suppressPop.current.timer)
+      suppressPop.current = null
+    }
   }, [runGuards])
 
   const registerGuard = useCallback((guard: NavigationGuard): (() => void) => {
@@ -104,8 +117,8 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
 
   const navigateBack = useCallback((): void => {
     if (index.current > 0) window.history.back()
-    else void navigate({ collectionId: parentOfCurrent })
-  }, [navigate, parentOfCurrent])
+    else void navigate(route.noteId ? { collectionId: route.collectionId } : { collectionId: parentOfCurrent })
+  }, [navigate, parentOfCurrent, route.noteId, route.collectionId])
 
   const value = useMemo<NavigationValue>(() => ({
     route,

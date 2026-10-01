@@ -43,7 +43,7 @@ export function CollectionView({ items, onAddNote, onAddCollection, onCopyNote, 
     body = renderNote(note)
   } else if (children.length === 0) {
     body = parentId === null
-      ? <EmptyState onAddNote={() => onAddNote?.(null)} onAddCollection={() => onAddCollection?.(null)} />
+      ? <EmptyState onAddNote={onAddNote && (() => onAddNote(null))} onAddCollection={onAddCollection && (() => onAddCollection(null))} />
       : <section className="empty-state" aria-label="Empty collection">
         <p>This collection is empty.</p>
         <div className="empty-actions">
