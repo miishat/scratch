@@ -57,6 +57,9 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
   // captures the value at start and drops its result if it has moved on, so a
   // pending load or mutation can never put a decrypted snapshot back after lock.
   const epoch = useRef(0)
+  // Set by clearUnlockedState while the session is still live; only a new session
+  // resets it, so remote changes cannot restore a snapshot after an explicit clear.
+  const cleared = useRef(false)
 
   // Reset decrypted state during render whenever the session identity changes,
   // so a stale snapshot can never survive a lock or vault replacement.
@@ -70,6 +73,8 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
 
   const clearUnlockedState = useCallback((): void => {
     epoch.current += 1
+    cleared.current = true
+    holds.current = 0
     pendingRefresh.current = false
     setSnapshot(null)
     setStatus('locked')
@@ -78,7 +83,7 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (!session) return
+    if (!session || cleared.current) return
     const started = epoch.current
     pendingRefresh.current = false
     let next: { snapshot: LibrarySnapshot | null; error: string | null }
@@ -99,9 +104,11 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
 
   useEffect(() => {
     if (!session) return
+    cleared.current = false
     void refresh()
 
     const subscription = subscribeToChanges(() => {
+      if (cleared.current) return
       if (holds.current > 0) {
         pendingRefresh.current = true
         setRemoteChangePending(true)

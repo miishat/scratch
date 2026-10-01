@@ -280,4 +280,103 @@ describe('LibraryProvider semantics', () => {
       expect(captured.value?.status).toBe('locked')
     },
   )
+
+  async function mountReady() {
+    const init = await initializeLibrary(vault)
+    if (!init.ok) throw new Error(init.message)
+    const view = render(
+      <LibraryProvider session={init.session}>
+        <Probe />
+      </LibraryProvider>,
+    )
+    await waitFor(() => expect(captured.value?.status).toBe('ready'))
+    return { init, view, before: captured.value!.snapshot! }
+  }
+
+  async function postRemoteChange(before: { header: { vaultId: string }; meta: { generation: number } }) {
+    const channel = new BroadcastChannel('scratch-v1-changes')
+    try {
+      channel.postMessage({ vaultId: before.header.vaultId, generation: before.meta.generation, revision: 99 })
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    } finally {
+      channel.close()
+    }
+  }
+
+  it.skipIf(typeof BroadcastChannel === 'undefined')(
+    'clearUnlockedState resets holds so a later remote change is neither held nor applied',
+    async () => {
+      const { before } = await mountReady()
+      let release!: () => void
+      act(() => {
+        release = captured.value!.holdRefresh()
+      })
+      act(() => {
+        captured.value!.clearUnlockedState()
+      })
+      act(() => {
+        release()
+      })
+      const callsBefore = vi.mocked(loadLibrary).mock.calls.length
+      await act(async () => {
+        await postRemoteChange(before)
+      })
+      expect(captured.value?.remoteChangePending).toBe(false)
+      expect(captured.value?.snapshot).toBeNull()
+      expect(captured.value?.status).toBe('locked')
+      expect(vi.mocked(loadLibrary).mock.calls.length).toBe(callsBefore)
+    },
+  )
+
+  it.skipIf(typeof BroadcastChannel === 'undefined')(
+    'a remote change after clearUnlockedState does not restore the snapshot',
+    async () => {
+      const { before } = await mountReady()
+      act(() => {
+        captured.value!.clearUnlockedState()
+      })
+      const callsBefore = vi.mocked(loadLibrary).mock.calls.length
+      await act(async () => {
+        await postRemoteChange(before)
+      })
+      expect(captured.value?.snapshot).toBeNull()
+      expect(captured.value?.status).toBe('locked')
+      expect(vi.mocked(loadLibrary).mock.calls.length).toBe(callsBefore)
+    },
+  )
+
+  it.skipIf(typeof BroadcastChannel === 'undefined')(
+    'an old session release does not drop a hold taken by a new session',
+    async () => {
+      const { init, view, before } = await mountReady()
+      let releaseOld!: () => void
+      act(() => {
+        releaseOld = captured.value!.holdRefresh()
+      })
+      view.rerender(
+        <LibraryProvider session={null}>
+          <Probe />
+        </LibraryProvider>,
+      )
+      await waitFor(() => expect(captured.value?.status).toBe('locked'))
+      view.rerender(
+        <LibraryProvider session={init.session}>
+          <Probe />
+        </LibraryProvider>,
+      )
+      await waitFor(() => expect(captured.value?.status).toBe('ready'))
+      act(() => {
+        captured.value!.holdRefresh()
+      })
+      act(() => {
+        releaseOld()
+      })
+      const callsBefore = vi.mocked(loadLibrary).mock.calls.length
+      await act(async () => {
+        await postRemoteChange(before)
+      })
+      expect(captured.value?.remoteChangePending).toBe(true)
+      expect(vi.mocked(loadLibrary).mock.calls.length).toBe(callsBefore)
+    },
+  )
 })
