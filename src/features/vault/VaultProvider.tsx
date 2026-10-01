@@ -67,6 +67,11 @@ export interface VaultContextValue {
   installSession: (next: VaultSession, from: VaultSession | null) => boolean
   registerDraft: (draft: DirtyDraft) => () => void
   readDraft: () => DraftContent | null
+  // Draft choices for flows other than locking (an app update). Save resolves to a
+  // failure message, or null when the draft was saved or there was none.
+  saveDraft: () => Promise<string | null>
+  discardDraft: () => void
+  cancelDraft: () => void
   saveAndLock: () => Promise<void>
   discardAndLock: () => void
   cancelLock: () => void
@@ -335,6 +340,14 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     }
   }, [])
 
+  const discardDraft = useCallback((): void => {
+    draftRef.current?.discard()
+  }, [])
+
+  const cancelDraft = useCallback((): void => {
+    draftRef.current?.cancel()
+  }, [])
+
   const saveAndLock = useCallback(async (): Promise<void> => {
     const current = sessionRef.current
     if (stateRef.current === 'lock-error') {
@@ -544,6 +557,9 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       installSession,
       registerDraft,
       readDraft,
+      saveDraft,
+      discardDraft,
+      cancelDraft,
       saveAndLock,
       discardAndLock,
       cancelLock,
@@ -553,7 +569,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     [
       state, session, concealed, error, notice, recoveredDraft, clearRecoveredDraft, hasDirtyDraft,
       remoteReplacement, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
-      changePassphrase, installSession, registerDraft, readDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
+      changePassphrase, installSession, registerDraft, readDraft, saveDraft, discardDraft, cancelDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
       keepEditing,
     ],
   )

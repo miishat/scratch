@@ -37,6 +37,8 @@ export function Dialog({ title, children, onRequestClose, canClose, className, i
   useEffect(() => {
     function guard(event: FocusEvent) {
       const target = event.target as HTMLElement
+      // Page-level notices (such as the update prompt) stay usable above an open dialog.
+      if (target.closest?.('[data-focus-exempt]')) return
       if (ref.current && openDialogs[openDialogs.length - 1] === ref.current && !ref.current.contains(target)) {
         const first = ref.current.querySelector<HTMLElement>(focusable)
         ;(first ?? ref.current)?.focus()

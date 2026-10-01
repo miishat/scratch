@@ -4,7 +4,19 @@ A local-first, encrypted short-note app in progress. This first slice establishe
 
 ## Local commands
 
-Requires Node 22.12 or newer. Run `npm ci`, then `npm run dev`. For checks, run `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`. `npm run test:watch` starts interactive unit tests; `npm run test:e2e` runs browser tests when they exist.
+Requires Node 22.12 or newer. Run `npm ci`, then `npm run dev`. For checks, run `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`. `npm run test:watch` starts interactive unit tests; `npm run test:e2e` builds the app and runs the browser tests against the production preview (not the dev server), because the service worker only exists in the build. Install the browser once with `npx playwright install chromium`.
+
+## Offline use and installing
+
+- Scratch needs one online visit first. The first load downloads the app and stores it in the browser; after that it opens without a network. A browser that has never loaded Scratch cannot open it offline.
+- Installing Scratch as an app (the browser's Install or Add to Home Screen option) needs HTTPS. `http://localhost` also works for local testing; a plain `http://` address on another host does not support installing or offline use, but notes still work online there.
+- Notes are stored in each browser on each device, encrypted, and do not sync. To move a library to another browser or device, use Export backup, then Import backup there.
+- When a new version is available, Scratch asks before updating. If you have an unsaved note you can save it, discard it, or cancel and keep writing. Updating reloads the app, so you will unlock it again.
+- The offline cache holds only the app files (page, scripts, styles, fonts, icons). It never holds notes, backups, or your passphrase.
+
+## Deploying to a static host
+
+Run `npm run build` and upload the contents of `dist/` to any static host that serves over HTTPS. The build uses relative paths, so it works at a site root or under a sub-path. No server code or database is needed. Serve `sw.js` and `index.html` without long-lived caching headers so browsers see updates promptly; hashed files under `assets/` can be cached for a long time.
 
 ## Resolved direct package versions
 

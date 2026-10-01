@@ -186,3 +186,14 @@ concealed and offers Save or Discard instead of reporting Locked. When another
 tab replaces the vault or its header, a tab without a dirty draft releases its
 session; a tab with a dirty draft keeps it concealed until the user exports a
 backup or discards the draft.
+
+## Offline cache
+
+Scratch registers a static service worker so the app shell opens without a
+network after one online visit. The worker precaches only build output: the
+page, scripts, styles, bundled woff2 fonts, the manifest, and icons. It has no
+runtime caching and no handler for other requests, so notes, vault records,
+exported backups, imported files, and passphrases are never written to Cache
+Storage. Library data stays only in IndexedDB as described above. An update
+replaces the cached shell only after the person approves it, and the page then
+reloads to the locked screen because keys never survive a reload.

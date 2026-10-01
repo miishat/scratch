@@ -13,6 +13,7 @@ import { LibraryProvider, useLibrary } from '../features/library/LibraryProvider
 import type { ItemId, LibraryItem } from '../features/library/types'
 import { NoteEditor } from '../features/notes/NoteEditor'
 import type { EditorOutcome } from '../features/notes/useNoteDraft'
+import { UpdateNotice } from '../features/offline/UpdateNotice'
 import { missingRequiredApis } from '../features/support/requiredApis'
 import { UnsupportedBrowserScreen } from '../features/support/SupportScreens'
 import { ChangePassphraseDialog } from '../features/vault/ChangePassphraseDialog'
@@ -61,7 +62,7 @@ type AppProps = Pick<ShellProps, 'children'> & Pick<CollectionViewProps, 'onAddN
 export function App(props: AppProps) {
   const missing = missingRequiredApis()
   if (missing.length) return <UnsupportedBrowserScreen missingApis={missing} />
-  return <VaultProvider><VaultGate {...props} /></VaultProvider>
+  return <VaultProvider><VaultGate {...props} /><UpdateNotice /></VaultProvider>
 }
 
 // The library is only mounted while a vault session exists, so nothing decrypted
