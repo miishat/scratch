@@ -1,5 +1,5 @@
 import type { Generation, ItemId, ItemKind, LibraryItem, StoredItem, VaultId } from '../library/types'
-import { validateItem, validatePassphrase } from '../library/validation'
+import { isCollectionColor, validateItem, validatePassphrase } from '../library/validation'
 import type {
   CipherEnvelope,
   CreatedVault,
@@ -231,10 +231,6 @@ function itemPayloadBytes(item: LibraryItem): Bytes {
   return utf8Encode(JSON.stringify(payload))
 }
 
-function isCollectionColorValue(value: unknown): boolean {
-  return value === 'sage' || value === 'clay' || value === 'ochre' || value === 'slate'
-}
-
 function parseItemPayload(stored: StoredItem, bytes: Uint8Array): LibraryItem | null {
   let parsed: unknown
   try {
@@ -261,7 +257,7 @@ function parseItemPayload(stored: StoredItem, bytes: Uint8Array): LibraryItem | 
       title: typeof obj.title === 'string' ? obj.title : null,
       body: null,
       isSecret: false,
-      color: isCollectionColorValue(obj.color) ? (obj.color as LibraryItem['color']) : null,
+      color: isCollectionColor(obj.color) ? obj.color : null,
     }
   }
 

@@ -22,11 +22,12 @@ export const fixtureIds = {
 } as const
 
 const BASE_TIME = 1_700_000_000_000
-let seq = 0
+let idSeq = 0
+let timeSeq = 0
 
 function nextId(): ItemId {
-  seq += 1
-  return `00000000-0000-4000-8000-${seq.toString(16).padStart(12, '0')}`
+  idSeq += 1
+  return `00000000-0000-4000-8000-${idSeq.toString(16).padStart(12, '0')}`
 }
 
 interface ItemOverrides {
@@ -44,7 +45,8 @@ interface ItemOverrides {
 
 // Build a deterministic LibraryItem with a monotonically increasing creation time.
 export function makeItem(overrides: ItemOverrides): LibraryItem {
-  const createdAt = overrides.createdAt ?? BASE_TIME + seq
+  timeSeq += 1
+  const createdAt = overrides.createdAt ?? BASE_TIME + timeSeq
   return {
     id: overrides.id ?? nextId(),
     vaultId: fixtureVaultId,

@@ -55,6 +55,8 @@ describe('vault crypto', () => {
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('unexpected success')
     expect(result.code).toBe('wrong-passphrase')
+    // A wrong passphrase produces no session and no new empty vault.
+    expect('session' in result).toBe(false)
   })
 
   it('fails authentication when a ciphertext bit is flipped', async () => {

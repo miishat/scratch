@@ -19,12 +19,11 @@ import {
   descendantsOf,
   validateTree,
 } from '../src/features/library/hierarchy'
-import { compareItems, deriveNoteTitle, displayTitle, sortItems } from '../src/features/library/display'
+import { deriveNoteTitle, displayTitle, sortItems } from '../src/features/library/display'
 import {
   fixtureAnthropicSecret,
   fixtureApiTokens,
-  fixtureDuplicateNoteA,
-  fixtureDuplicateNoteB,
+  fixtureIds,
   fixtureLibrary,
   fixtureOpenAiSecret,
   fixtureReminders,
@@ -206,21 +205,34 @@ describe('tree validation', () => {
 })
 
 describe('sorting', () => {
-  it('orders collections first, then createdAt ascending, then id ascending', () => {
+  it('orders the fixture library collections first, then createdAt, then id', () => {
     const sorted = sortItems(fixtureLibrary)
-    for (let i = 0; i < sorted.length - 1; i++) {
-      expect(compareItems(sorted[i], sorted[i + 1])).toBeLessThanOrEqual(0)
-    }
-    const kinds = sorted.map((i) => i.kind)
-    const firstNote = kinds.indexOf('note')
-    if (firstNote >= 0) {
-      expect(kinds.slice(0, firstNote).every((k) => k === 'collection')).toBe(true)
-    }
-    // Duplicate-title notes sort deterministically by id.
-    const aIndex = sorted.findIndex((i) => i.id === fixtureDuplicateNoteA.id)
-    const bIndex = sorted.findIndex((i) => i.id === fixtureDuplicateNoteB.id)
-    expect(aIndex).toBeGreaterThanOrEqual(0)
-    expect(bIndex).toBeGreaterThanOrEqual(0)
+    expect(sorted.map((i) => i.id)).toEqual([
+      fixtureIds.apiTokens,
+      fixtureIds.personal,
+      fixtureIds.reminders,
+      fixtureIds.openai,
+      fixtureIds.anthropic,
+      fixtureIds.welcome,
+      fixtureIds.duplicateA,
+      fixtureIds.duplicateB,
+    ])
+  })
+
+  it('orders notes by createdAt ascending regardless of input order', () => {
+    const late = makeNote({ id: 'id-late', title: 'late', body: 'late', createdAt: 300 })
+    const early = makeNote({ id: 'id-early', title: 'early', body: 'early', createdAt: 100 })
+    const mid = makeNote({ id: 'id-mid', title: 'mid', body: 'mid', createdAt: 200 })
+    const sorted = sortItems([late, early, mid])
+    expect(sorted.map((i) => i.id)).toEqual(['id-early', 'id-mid', 'id-late'])
+  })
+
+  it('breaks createdAt ties by id ascending', () => {
+    const b = makeNote({ id: 'id-b', title: 'b', body: 'b', createdAt: 100 })
+    const c = makeNote({ id: 'id-c', title: 'c', body: 'c', createdAt: 100 })
+    const a = makeNote({ id: 'id-a', title: 'a', body: 'a', createdAt: 100 })
+    const sorted = sortItems([c, a, b])
+    expect(sorted.map((i) => i.id)).toEqual(['id-a', 'id-b', 'id-c'])
   })
 })
 
