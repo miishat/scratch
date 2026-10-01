@@ -4,6 +4,8 @@ body { margin: 0; min-width: 0; background: var(--page-bg); color: var(--text); 
 button, input { font: inherit; }
 button { min-height: 44px; border: 1px solid var(--focus); border-radius: 8px; background: var(--surface); color: var(--text); padding: 8px 16px; cursor: pointer; transition: border-color 120ms, background-color 120ms; }
 button:hover { border-color: var(--text); background: var(--page-bg); }
+/* Native radios and checkboxes would otherwise use the browser's blue accent. */
+input[type="radio"], input[type="checkbox"] { accent-color: var(--action); }
 button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .primary-button { background: var(--action); color: var(--action-text); border-color: var(--action); font-weight: 600; }
 .primary-button:hover { border-color: var(--text); background: var(--action); }

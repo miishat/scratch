@@ -382,3 +382,20 @@ test.describe('keyboard only', () => {
     expect(order.some((entry) => entry.startsWith('a:Order'))).toBe(true)
   })
 })
+
+test.describe('palette', () => {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`native radios and checkboxes use the action color, not the browser blue (${colorScheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme })
+      await createLibrary(page)
+      await openAddMenu(page, 'Add note')
+      const accent = (selector: string) => page.locator(selector).first().evaluate((element) => ({ own: getComputedStyle(element).accentColor, action: (() => { const probe = document.createElement('span'); probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--action'); document.body.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value })() }))
+      const checkbox = await accent('.editor-secret input[type="checkbox"]')
+      expect(checkbox.own).toBe(checkbox.action)
+      await page.keyboard.press('Escape')
+      await openSettings(page)
+      const radio = await accent('input[type="radio"]')
+      expect(radio.own).toBe(radio.action)
+    })
+  }
+})
