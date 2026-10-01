@@ -1,2 +1,5 @@
 import type { ReactNode } from 'react'
-export function TileGrid({ children }: { children: ReactNode }) { return <div className="tile-grid">{children}</div> }
+
+export function TileGrid({ children, label }: { children: ReactNode, label?: string }) {
+  return <ul className="tile-grid" aria-label={label}>{children}</ul>
+}

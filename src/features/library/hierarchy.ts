@@ -115,3 +115,20 @@ export function validateTree(items: LibraryItem[]): TreeError[] {
 
   return errors
 }
+
+// The collections from the top level down to the collection with the given id,
+// inclusive. Empty when the id is null or unknown. Cycle-guarded.
+export function collectionPath(items: LibraryItem[], id: ItemId | null): LibraryItem[] {
+  const byId = indexById(items)
+  const path: LibraryItem[] = []
+  const seen = new Set<ItemId>()
+  let cursor = id
+  while (cursor !== null && !seen.has(cursor)) {
+    seen.add(cursor)
+    const node = byId.get(cursor)
+    if (!node || node.kind !== 'collection') break
+    path.unshift(node)
+    cursor = node.parentId
+  }
+  return path
+}
