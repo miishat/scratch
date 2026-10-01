@@ -327,6 +327,9 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
     answerConfirm,
     openConflict: (kind: ConflictKind) => setConflict(kind),
     closeConflict: () => { setConflict(null); setFailure(null) },
+    // Whether the saved note this draft started from was Secret, so its text stays
+    // masked in the conflict panel even if the Secret box was unchecked.
+    baseIsSecret: initial.isSecret,
     release,
   }
 }

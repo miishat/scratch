@@ -16,6 +16,8 @@ type Props = {
   kind: ConflictKind
   noteId: ItemId | null
   draft: NoteDraftValues
+  // The saved note was Secret, whatever the draft's Secret box now says.
+  baseWasSecret: boolean
   message: string | null
   busy: boolean
   onKeepEditing: () => void
@@ -37,7 +39,7 @@ function Version({ label, title, body, secret }: { label: string, title: string,
 // Shown when the note changed elsewhere, or the library was replaced. It never
 // writes: Latest and Your draft sit side by side and the person picks what
 // happens next. Secret content stays masked in both versions.
-export function NoteConflictPanel({ kind, noteId, draft, message, busy, onKeepEditing, onLoadLatest, onSaveAsNew }: Props) {
+export function NoteConflictPanel({ kind, noteId, draft, baseWasSecret, message, busy, onKeepEditing, onLoadLatest, onSaveAsNew }: Props) {
   const { session, discardDraftAndReload } = useVault()
   const [latest, setLatest] = useState<Latest>(kind === 'replaced' ? { state: 'replaced', message: message ?? '' } : { state: 'loading' })
   const [confirming, setConfirming] = useState(false)
@@ -93,7 +95,7 @@ export function NoteConflictPanel({ kind, noteId, draft, message, busy, onKeepEd
       {latest.state === 'error' && <p role="alert">{latest.message}</p>}
       {latest.state === 'deleted' && <section className="conflict-version" aria-label="Latest"><h4>Latest</h4><p>This note was deleted in another tab.</p></section>}
       {latest.state === 'note' && <Version label="Latest" title={latest.note.title ?? ''} body={latest.note.body ?? ''} secret={secretLatest} />}
-      <Version label="Your draft" title={draft.title} body={draft.body} secret={draft.isSecret || secretLatest} />
+      <Version label="Your draft" title={draft.title} body={draft.body} secret={draft.isSecret || baseWasSecret || secretLatest} />
     </div>
     {message && <p role="alert" className="form-error">{message}</p>}
     {confirming

@@ -110,6 +110,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
           kind={conflict}
           noteId={note?.id ?? null}
           draft={values}
+          baseWasSecret={draft.baseIsSecret}
           message={draft.failure?.message ?? null}
           busy={draft.saving}
           onKeepEditing={draft.closeConflict}
