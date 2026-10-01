@@ -21,8 +21,8 @@ What was run, on what, what it showed, and what still needs a person with a real
 | --- | --- |
 | `npm run typecheck` | clean |
 | `npm run lint` | clean |
-| `npm test` | 18 files, 382 tests passed (1 measurement helper skipped without `MEASURE=1`) |
-| `npm run build` | succeeds (precache 32 entries, 696 KiB) |
+| `npm test` | 18 files, 406 tests passed (1 measurement helper skipped without `MEASURE=1`) |
+| `npm run build` | succeeds (precache 32 entries, 699 KiB) |
 | `npm run test:e2e` | see "End-to-end results by project" |
 
 ## End-to-end results by project
@@ -31,13 +31,13 @@ Run against `vite preview` of the production build, which applies the Content Se
 
 | Project | Specs | Passed | Skipped | Failed |
 | --- | --- | --- | --- | --- |
-| chromium (desktop, 1280 px) | scratch, transfers, reflow, offline, secrets, support, accessibility, csp | 54 | 0 | 0 |
-| webkit (desktop, 1280 px) | same as chromium | 53 | 1 (the build-file grep runs once, on chromium) | 0 after the fix below |
-| mobile-chromium (Pixel 7 emulation, 360 px) | scratch, transfers, reflow | 10 | 2 (the 320 px and 200% walks run on the desktop projects) | 0 |
-| mobile-webkit (iPhone 13 emulation, 360 px) | scratch, transfers, reflow | 10 | 2 (same) | 0 |
+| chromium (desktop, 1280 px) | scratch, transfers, reflow, offline, secrets, support, accessibility, csp | 55 | 0 | 0 |
+| webkit (desktop, 1280 px) | same as chromium | 54 | 1 (the build-file grep runs once, on chromium) | 0 after the fix below |
+| mobile-chromium (Pixel 7 emulation, 360 px) | scratch, transfers, reflow | 11 | 2 (the 320 px and 200% walks run on the desktop projects) | 0 |
+| mobile-webkit (iPhone 13 emulation, 360 px) | scratch, transfers, reflow | 11 | 2 (same) | 0 |
 | firefox | not run | not run | | cannot start on this machine |
 
-The single full run (`npm run test:e2e`, 2 workers, about 3.5 minutes, 132 tests) ended with 125 passed, 5 skipped, 2 failed. Both failures were WebKit keyboard tests in `accessibility.spec.ts`, and both were test timing or engine behavior, not product defects: one test moved focus within about 10 ms of saving a note, before the editor had handed focus back to Add (the test now waits for that), and one expected tab stops on tile links, which Safari and its WebKit port skip by default (now asserted on the other engines only). After that test-only change the keyboard tests passed 3 times on WebKit and on Chromium, and `accessibility`, `csp`, `secrets`, `scratch`, and `reflow` passed 3 consecutive repeats on Chromium (162 tests, 0 failures, 0 flaky). The product code did not change after the full run.
+The latest full run, after the final-review fixes (`npm run test:e2e`, 2 workers, about 3.5 minutes), ended with 131 passed, 5 skipped, 0 failed, with Firefox left out as below. `npm test` was run three times in a row on the final tree (406 tests, 18 files, all green each time, about 46 s each). The earlier full run on the pre-fix tree was as follows. The single full run (`npm run test:e2e`, 2 workers, about 3.5 minutes, 132 tests) ended with 125 passed, 5 skipped, 2 failed. Both failures were WebKit keyboard tests in `accessibility.spec.ts`, and both were test timing or engine behavior, not product defects: one test moved focus within about 10 ms of saving a note, before the editor had handed focus back to Add (the test now waits for that), and one expected tab stops on tile links, which Safari and its WebKit port skip by default (now asserted on the other engines only). After that test-only change the keyboard tests passed 3 times on WebKit and on Chromium, and `accessibility`, `csp`, `secrets`, `scratch`, and `reflow` passed 3 consecutive repeats on Chromium (162 tests, 0 failures, 0 flaky). The product code did not change after the full run.
 
 ### Firefox was NOT run
 
@@ -90,6 +90,8 @@ Not run by me, because they need hardware or assistive technology this environme
 - [ ] Real browser zoom to 200% and 400% and operating-system text enlargement (iOS Dynamic Type, Android font size, Windows text scaling): no clipped or unreachable controls.
 - [ ] Reduced motion set in the operating system on a real device.
 - [ ] Touch target feel and one-handed reach on a real phone.
+- [ ] Android file chooser: on Android Chrome, open Settings, Import backup, choose a file through the system file chooser, and confirm the dialog (chosen file and typed backup passphrase) is still there when you return, and that nothing readable is on screen while the page is in the background. The unit tests cover hide and show with the tab event only.
+- [ ] Two-tab update: with a new build waiting, open Scratch in two tabs, type an unsaved note in one and press Update now in the other, and confirm the tab with the note does not reload (on iOS Safari and an installed iOS app as well, where the unload prompt is not honored), keeps the note, and offers the update. The unit tests cover the store, not a real worker handover.
 - [ ] Hiding the secret when switching apps or locking the phone, and the 60 second hidden-tab lock, on a real phone.
 - [ ] Installing as an app from HTTPS on a phone and a desktop, then opening it offline.
 - [ ] Firefox: the whole browser suite and a hand check.
@@ -107,7 +109,7 @@ Evaluation against the design brief, from those images (a reading by the impleme
 - **Both themes cover every state.** Every state captured, every dialog, and the error and empty states render legibly in both themes; axe finds no contrast violation.
 - **Deviations noted, none changed (style opinion rather than a clear brief violation):**
   1. The browser's native clear button inside the search box renders in the browser's own blue in Chromium. It is a small control and not trivially themable.
-  2. The first-visit "Scratch is ready to work offline." notice floats over the top of the page for about six seconds, covering the wordmark and, on a 360 px phone, the Add button's label. It ignores pointer input, so taps still reach what is underneath, and it clears on the first key press; but a person may still see Add obscured on first install.
+  2. Resolved after review: the first-visit "Scratch is ready to work offline." notice used to float over the header and cover the Add label on a 360 px phone. It now sits at the bottom of the page above the toast, still ignores pointer input and clears after about six seconds or on a key press, and an end-to-end check on every project confirms its box never intersects a visible control.
   3. The neutral card border is faint (about 1.3:1 on the page in light). The brief calls borders decorative, controls carry a 3:1 focus-colored boundary, and a test pins that distinction.
 
 ## Performance measurements
@@ -146,3 +148,15 @@ Not measured: anything on a real phone, any non-Chromium browser, a cold first l
 
 - Everything above ran on one Windows machine. Phones, Safari proper, Firefox, screen readers, and IMEs were not exercised.
 - Passing automated checks does not establish visual quality or phone-keyboard usability; the manual lists above are the remaining gate.
+
+## Final review fixes (this round)
+
+What changed after the whole-branch review, each behavior fix written test first:
+
+- An update approved in one tab no longer reloads other tabs. The worker library reloads on any takeover unless a reload handler is passed, so the store now receives it and reloads only for an activation this tab started inside its timeout; otherwise the tab keeps running and shows the update notice. Unit tests cover an external takeover with a dirty draft, one reload for an own activation, and a late takeover. Real two-tab handover is on the manual list.
+- A save of an existing note retries once on a freshly read library revision when another tab wrote something unrelated; the note's own version check still refuses a real conflict. A replaced library still blocks.
+- A header-only change from another tab (passphrase change) keeps the session and draft; a true replacement keeps its recovery panel but the inactivity and hidden deadlines now lock it, and export or Keep editing then need the passphrase again. A concealed dialog no longer takes focus back from the recovery controls.
+- Dialogs stay mounted but inert while the page is concealed; locking still removes them.
+- The conflict panel masks the draft when the saved note was Secret even while the latest version is loading.
+- No missing-collection notice after a deliberate delete; organize dialogs retry with the live item version after a conflict, and say so when the item is gone.
+- The data key length is checked on unlock (defense in depth: shorter keys were already refused by the ciphertext length check, so that test passes with or without the check). The `/` path has its own no-cache rule in `public/_headers`.
