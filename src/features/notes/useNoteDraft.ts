@@ -243,6 +243,9 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
   const answerConfirm = useCallback((discard: boolean) => {
     const kind = confirm
     setConfirm(null)
+    // The focused Keep editing button is about to unmount; put the caret back in the
+    // note so keyboard focus is not dropped to the page.
+    if (!discard) latest.current.onResume()
     if (kind === 'navigate') {
       const pending = pendingGuard.current
       pendingGuard.current = null

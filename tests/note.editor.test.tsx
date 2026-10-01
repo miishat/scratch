@@ -241,6 +241,8 @@ describe('dirty guards', () => {
     const group = screen.getByRole('group', { name: 'Unsaved changes' })
     await user.click(within(group).getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByRole('textbox', { name: 'Note body' })).toHaveValue('half a thought')
+    // The Keep editing button unmounts; focus must return to the note, not fall to the page.
+    expect(screen.getByRole('textbox', { name: 'Note body' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await user.click(within(screen.getByRole('group', { name: 'Unsaved changes' })).getByRole('button', { name: 'Discard' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
