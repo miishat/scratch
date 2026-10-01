@@ -46,7 +46,7 @@ export default defineConfig({
   expect: { timeout: 8000 },
   use: { baseURL: `http://localhost:${PORT}`, actionTimeout: 15000 },
   projects: [
-    { name: 'chromium', testMatch: DESKTOP_ONLY, use: { ...devices['Desktop Chrome'], viewport: DESKTOP } },
+    { name: 'chromium', testMatch: [...DESKTOP_ONLY, ...(process.env.CAPTURE_SCREENSHOTS === '1' ? [/screenshots\.spec\.ts/] : []), ...(process.env.MEASURE === '1' ? [/measure\.spec\.ts/] : [])], use: { ...devices['Desktop Chrome'], viewport: DESKTOP } },
     ...(FIREFOX_RUNS ? [{ name: 'firefox', testMatch: DESKTOP_ONLY, use: { ...devices['Desktop Firefox'], viewport: DESKTOP } }] : []),
     { name: 'webkit', testMatch: DESKTOP_ONLY, use: { ...devices['Desktop Safari'], viewport: DESKTOP } },
     { name: 'mobile-chromium', testMatch: FUNCTIONAL, use: { ...devices['Pixel 7'], viewport: PHONE } },
