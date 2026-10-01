@@ -258,7 +258,7 @@ describe('vault session lifecycle', () => {
     expect(header.ok && header.library).toBe('absent')
   })
 
-  it('offers Import backup on setup only when a handler is supplied', async () => {
+  it('offers Import backup on setup and lets a supplied handler take over', async () => {
     const onImportBackup = vi.fn()
     render(<App onImportBackup={onImportBackup} />)
     await until(() => screen.getByRole('button', { name: 'Import backup' }))
@@ -266,8 +266,10 @@ describe('vault session lifecycle', () => {
     expect(onImportBackup).toHaveBeenCalledTimes(1)
     cleanup()
     render(<App />)
-    await until(() => screen.getByLabelText('Passphrase'))
-    expect(screen.queryByRole('button', { name: 'Import backup' })).not.toBeInTheDocument()
+    // Without an override the app wires its own import dialog.
+    await until(() => screen.getByRole('button', { name: 'Import backup' }))
+    await typing().click(screen.getByRole('button', { name: 'Import backup' }))
+    expect(screen.getByRole('dialog', { name: 'Import backup' })).toBeInTheDocument()
   })
 
   it('keeps the vault locked and the records unchanged after a wrong passphrase', async () => {

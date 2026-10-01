@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { BackupDialog } from '../features/backup/BackupDialog'
+import { exportRecoveryBackup as buildRecoveryBackup, saveBackupFile } from '../features/backup/backup'
 import { copyNote, type CopyResult } from '../features/clipboard/copy'
 import { SearchResults } from '../features/search/SearchResults'
 import { useSearch } from '../features/search/useSearch'
@@ -18,6 +20,7 @@ import type { DraftContent } from '../features/vault/session'
 import { useVault, VaultProvider } from '../features/vault/VaultProvider'
 import {
   LockErrorPanel,
+  RecoveryExportError,
   RemoteChangePanel,
   VaultScreen,
   type ExportRecoveryBackup,
@@ -50,8 +53,7 @@ export function AppShell({ children, onAddNote, onAddCollection, onSettings, onH
 }
 
 type AppProps = Pick<ShellProps, 'children'> & Pick<CollectionViewProps, 'onAddNote' | 'onAddCollection' | 'onCopyNote' | 'onItemMenu' | 'renderNote'> & {
-  // Wired to the backup helper later; the recovery panel hides its export button
-  // until a handler exists, so no broken control ships.
+  // Overrides for tests; the app wires the real backup helpers by default.
   exportRecoveryBackup?: ExportRecoveryBackup
   onImportBackup?: () => void
 }
@@ -66,7 +68,14 @@ export function App(props: AppProps) {
 // is reachable from a locked tab.
 function VaultGate(props: AppProps) {
   const vault = useVault()
-  if (vault.state !== 'unlocked' && vault.state !== 'lock-error') return <VaultScreen onImportBackup={props.onImportBackup} />
+  const [importing, setImporting] = useState(false)
+  if (vault.state !== 'unlocked' && vault.state !== 'lock-error') {
+    // First-use import; the dialog unmounts with the screen once the imported library is open.
+    return <>
+      <VaultScreen onImportBackup={props.onImportBackup ?? (() => setImporting(true))} />
+      {importing && vault.state === 'setup' && <BackupDialog replace={null} onClose={() => setImporting(false)} onImported={() => setImporting(false)} />}
+    </>
+  }
   return <LibraryProvider session={vault.session}><UnlockedApp {...props} /></LibraryProvider>
 }
 
@@ -96,14 +105,23 @@ interface Composer {
 
 const TOAST_MS = 4000
 
+// Builds the recovery backup from the old in-memory library plus the unsaved
+// draft and hands it to the browser. A refusal carries a safe message for the panel.
+const recoverToFile: ExportRecoveryBackup = async ({ session, snapshot, draft }) => {
+  const result = await buildRecoveryBackup(session, snapshot, draft)
+  if (!result.ok) throw new RecoveryExportError(result.message)
+  saveBackupFile(result.blob, result.filename)
+}
+
 function UnlockedShell(props: AppProps) {
-  const { children, exportRecoveryBackup } = props
+  const { children } = props
+  const exportRecoveryBackup = props.exportRecoveryBackup ?? recoverToFile
   const vault = useVault()
   const library = useLibrary()
   const navigation = useNavigation()
   const parentId = navigation.route.collectionId
   const routeKey = formatRoute(navigation.route)
-  const [dialog, setDialog] = useState<'settings' | 'passphrase' | null>(null)
+  const [dialog, setDialog] = useState<'settings' | 'passphrase' | 'import' | null>(null)
   const [composer, setComposer] = useState<Composer | null>(null)
   const [recovery, setRecovery] = useState<{ noteId: ItemId, draft: DraftContent } | null>(null)
   const [toast, setToast] = useState('')
@@ -241,7 +259,19 @@ function UnlockedShell(props: AppProps) {
       />}
     </div>
     {!hidden && organize.dialogs}
-    {!hidden && dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} onChangePassphrase={() => setDialog('passphrase')} />}
+    {!hidden && dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} onChangePassphrase={() => setDialog('passphrase')} onImportBackup={() => setDialog('import')} />}
+    {!hidden && dialog === 'import' && vault.session && <BackupDialog
+      replace={{
+        session: vault.session,
+        currentBase: () => library.snapshot ? { generation: library.snapshot.meta.generation, revision: library.snapshot.meta.revision } : null,
+      }}
+      onClose={() => setDialog(null)}
+      onImported={() => {
+        setDialog(null)
+        announce('Library replaced')
+        void navigation.openCollection(null)
+      }}
+    />}
     {!hidden && dialog === 'passphrase' && !hasDirtyDraft && <ChangePassphraseDialog onClose={() => setDialog(null)} />}
     {lockError && <LockErrorPanel />}
     {!lockError && vault.remoteReplacement && <RemoteChangePanel snapshot={library.snapshot} session={vault.session} exportRecoveryBackup={exportRecoveryBackup} />}

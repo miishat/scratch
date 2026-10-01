@@ -15,6 +15,10 @@ export interface RecoveryExport {
 
 export type ExportRecoveryBackup = (info: RecoveryExport) => Promise<void>
 
+// A refusal whose message is safe to show on the recovery panel, such as an
+// invalid draft. Any other failure shows the generic message.
+export class RecoveryExportError extends Error {}
+
 export function VaultScreen({ onImportBackup }: { onImportBackup?: () => void }) {
   const { state } = useVault()
   if (state === 'setup') return <SetupScreen onImportBackup={onImportBackup} />
@@ -138,8 +142,9 @@ export function RemoteChangePanel({
     try {
       await exportRecoveryBackup({ session, snapshot, draft })
       setStatus('Backup exported.')
-    } catch {
-      setStatus('Could not export a backup. Your draft is still here.')
+    } catch (cause) {
+      const detail = cause instanceof RecoveryExportError ? ` ${cause.message}` : ''
+      setStatus(`Could not export a backup.${detail} Your draft is still here.`)
     }
     setBusy(false)
   }

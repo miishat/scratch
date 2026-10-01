@@ -60,6 +60,9 @@ export interface VaultContextValue {
   requestLock: () => void
   automaticLock: () => Promise<void>
   changePassphrase: (current: string, next: string) => Promise<ActionResult>
+  // Ends the current session (if any) and starts one for a library that was just
+  // imported, using the generation the repository returned. Setup or unlocked only.
+  installSession: (next: VaultSession) => void
   registerDraft: (draft: DirtyDraft) => () => void
   readDraft: () => DraftContent | null
   saveAndLock: () => Promise<void>
@@ -382,6 +385,26 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     return { ok: true }
   }, [])
 
+  const installSession = useCallback(
+    (next: VaultSession): void => {
+      if (stateRef.current !== 'setup' && stateRef.current !== 'unlocked') return
+      // The old session, its draft bookkeeping, and any sealed draft belong to the
+      // library that was just replaced.
+      epoch.current += 1
+      draftRef.current = null
+      sealedRef.current = null
+      hiddenAt.current = null
+      remoteRef.current = false
+      setHasDirtyDraft(false)
+      setRemoteReplacement(false)
+      setLockPrompt(null)
+      setLockErrorMessage(null)
+      setLockNotice(null)
+      startSession(next, null)
+    },
+    [startSession],
+  )
+
   // Inactivity and visibility deadlines apply only while unlocked.
   useEffect(() => {
     if (state !== 'unlocked') return
@@ -485,6 +508,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       requestLock,
       automaticLock,
       changePassphrase,
+      installSession,
       registerDraft,
       readDraft,
       saveAndLock,
@@ -495,7 +519,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     [
       state, session, concealed, error, notice, recoveredDraft, clearRecoveredDraft, hasDirtyDraft,
       remoteReplacement, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
-      changePassphrase, registerDraft, readDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
+      changePassphrase, installSession, registerDraft, readDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
     ],
   )
 

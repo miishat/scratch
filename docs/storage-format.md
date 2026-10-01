@@ -76,13 +76,72 @@ opened as a draft.
 
 ## Backup format
 
-A backup is a UTF-8 JSON `.scratch` file. Outer fields are `format`
-(`"scratch-backup"`), `formatVersion` (`1`), `exportedAt`, the `VaultHeader`,
-and one authenticated snapshot envelope. The envelope plaintext is the vault ID
-plus the complete list of stored records sorted by ID. The envelope
-authenticates the whole set, so a missing, reordered, or tampered record cannot
-be mistaken for a complete library. The complete backup remains encrypted;
-theme preference and search queries are never exported.
+A backup is a UTF-8 JSON file named `scratch-backup-YYYY-MM-DD-HHmm.scratch`
+(local date and time). Its exact fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `format` | Always `"scratch-backup"`. |
+| `formatVersion` | Always `1`. |
+| `exportedAt` | ISO 8601 time of export. |
+| `header` | The `VaultHeader` described above. Its wrapper authenticates the salt and iteration count. |
+| `snapshot` | One `CipherEnvelope` sealed with the data key and the `"backup"` purpose. |
+
+The snapshot plaintext is the UTF-8 JSON `{ "vaultId", "records" }`, where
+`records` is the complete array of stored items (structural fields plus the
+encrypted payload envelope) sorted by ID. The envelope authenticates the whole
+set, so a missing, reordered, or tampered record cannot be mistaken for a
+complete library. Titles, bodies, secret flags, and colors stay encrypted twice
+over, and theme preference and search queries are never exported. Unknown or
+extra fields are rejected.
+
+The backup keeps the passphrase it was exported with: the header carries that
+wrapper, so opening it needs that passphrase even if the library's passphrase
+has changed since.
+
+### Export
+
+Export reads the header, meta, and all records in one readonly transaction, then
+encrypts outside it. It first checks that the stored vault ID, generation, and
+header wrapper still match the exporting session, and that every record
+decrypts into a valid tree; otherwise it asks the person to refresh instead of
+writing an ambiguous file. A file over 32 MiB is refused before download. The
+object URL is released shortly after the download starts.
+
+A tab whose library was replaced elsewhere while it holds an unsaved note uses
+the recovery export instead. It applies the note (as a new note, or as an edit
+of the note it came from) to a copy of that tab's old in-memory library,
+validates the result, encrypts every record with that tab's old key, and writes
+it under the old header, without reading or writing the database. An invalid or
+empty note is refused and stays with the editor.
+
+### Import
+
+Import is staged. The checks run in this order and stop at the first failure,
+and nothing is written until the person confirms:
+
+1. File size at most 32 MiB.
+2. JSON structure, format name and version, no extra fields, base64 and byte
+   lengths of the salt and every nonce and ciphertext, and an iteration count
+   of exactly 600000. No key is derived before this passes.
+3. Key derivation from the backup passphrase, unwrapping the data key, and
+   opening the snapshot envelope. A wrong passphrase and any authentication
+   failure give the same message and never produce a library.
+4. At most 1,000 records, no duplicate IDs, every record in the header's vault,
+   and every record decrypted and validated, then the whole tree (parents,
+   cycles, depth).
+
+The person sees the item count, may export the current library first, and then
+confirms Replace. The backup's passphrase becomes the library's passphrase from
+then on, and the theme is unchanged. Replacement requires an unlocked library
+with no unsaved note. Commit is one transaction that clears the items, writes
+the imported header and records, and increments generation and revision, after
+checking that the generation and revision are still the ones that were
+reviewed. Any mismatch or write error aborts with the old library intact, and a
+changed library needs a new review. After success the old in-memory session is
+cleared, the imported session is installed with the generation the repository
+returned, and other tabs are notified with identifiers and revisions only. A tab
+with an unsaved note keeps its old session and uses the recovery export.
 
 ## Limits
 
