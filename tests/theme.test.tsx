@@ -101,6 +101,75 @@ it('traps dialog focus and restores it to its trigger', async () => {
   expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus()
 })
 
+it('contains focus that escapes to the page, forward and reverse', async () => {
+  const user = userEvent.setup()
+  function Fixture() {
+    const [open, setOpen] = useState(false)
+    return <>
+      <button onClick={() => setOpen(true)}>Open</button>
+      <button>Outside</button>
+      {open && <Dialog title="Named dialog" onRequestClose={() => setOpen(false)} canClose={() => true}><button>First</button><button>Second</button></Dialog>}
+    </>
+  }
+  render(<Fixture />)
+  await user.click(screen.getByRole('button', { name: 'Open' }))
+  const dialog = screen.getByRole('dialog', { name: 'Named dialog' })
+  const outside = screen.getByRole('button', { name: 'Outside' })
+
+  outside.focus()
+  expect(dialog).toContainElement(document.activeElement as HTMLElement)
+  await user.tab()
+  expect(dialog).toContainElement(document.activeElement as HTMLElement)
+
+  outside.focus()
+  await user.tab({ shift: true })
+  expect(dialog).toContainElement(document.activeElement as HTMLElement)
+})
+
+it('wraps focus at the dialog boundaries in both directions', async () => {
+  const user = userEvent.setup()
+  function Fixture() {
+    const [open, setOpen] = useState(false)
+    return <><button onClick={() => setOpen(true)}>Open</button>{open && <Dialog title="Named dialog" onRequestClose={() => setOpen(false)} canClose={() => true}><button>First</button><button>Second</button></Dialog>}</>
+  }
+  render(<Fixture />)
+  await user.click(screen.getByRole('button', { name: 'Open' }))
+  const close = screen.getByRole('button', { name: 'Close dialog' })
+  const second = screen.getByRole('button', { name: 'Second' })
+
+  second.focus()
+  await user.tab()
+  expect(close).toHaveFocus()
+
+  close.focus()
+  await user.tab({ shift: true })
+  expect(second).toHaveFocus()
+})
+
+it('honors the close permission before closing', async () => {
+  const user = userEvent.setup()
+  function Fixture() {
+    const [open, setOpen] = useState(false)
+    return <><button onClick={() => setOpen(true)}>Open</button>{open && <Dialog title="Named dialog" onRequestClose={() => setOpen(false)} canClose={() => false}><button>First</button></Dialog>}</>
+  }
+  render(<Fixture />)
+  await user.click(screen.getByRole('button', { name: 'Open' }))
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('dialog', { name: 'Named dialog' })).toBeInTheDocument()
+})
+
+it('renders an SVG close icon with an accessible name', async () => {
+  const user = userEvent.setup()
+  function Fixture() {
+    const [open, setOpen] = useState(false)
+    return <><button onClick={() => setOpen(true)}>Open</button>{open && <Dialog title="Named dialog" onRequestClose={() => setOpen(false)} canClose={() => true}><button>First</button></Dialog>}</>
+  }
+  render(<Fixture />)
+  await user.click(screen.getByRole('button', { name: 'Open' }))
+  const close = screen.getByRole('button', { name: 'Close dialog' })
+  expect(close.querySelector('svg')).toBeInTheDocument()
+})
+
 it('exposes reachable Add and Settings controls in the narrow shell', async () => {
   render(<ThemeProvider><App /></ThemeProvider>)
   expect(screen.getByRole('button', { name: 'Add' })).toBeVisible()
