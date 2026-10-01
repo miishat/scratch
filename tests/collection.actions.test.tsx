@@ -455,7 +455,9 @@ describe('retrying after another tab wrote', () => {
     await deleteElsewhere(parent)
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
-    expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    // The refusal text can show before the refreshed library swaps in the vanished view, so wait for that view.
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument())
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('This item no longer exists.')
     await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await items()).toHaveLength(0)
@@ -506,7 +508,9 @@ describe('retrying after another tab wrote', () => {
     await deleteElsewhere(goes)
     await user.click(within(dialog).getByRole('button', { name: 'Move here' }))
     await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
-    expect(within(dialog).queryByRole('button', { name: 'Move here' })).not.toBeInTheDocument()
+    // The refusal text can show before the refreshed library swaps in the vanished view, so wait for that view.
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Move here' })).not.toBeInTheDocument())
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('This item no longer exists.')
     await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -550,7 +554,9 @@ describe('retrying after another tab wrote', () => {
     await deleteElsewhere(top)
     await user.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
     await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
-    expect(within(dialog).queryByRole('button', { name: 'Delete permanently' })).not.toBeInTheDocument()
+    // The refusal text can show before the refreshed library swaps in the vanished view, so wait for that view.
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Delete permanently' })).not.toBeInTheDocument())
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('This item no longer exists.')
     await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
