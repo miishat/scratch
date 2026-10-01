@@ -24,7 +24,7 @@
 - Produce a detailed implementation plan; do not execute it or write product code.
 - Use Node 22.12 or newer supported even-numbered LTS; recheck dependency requirements at implementation time and pin resolved package versions with package-lock.json.
 - Use no em dashes in project prose or UI copy.
-- Never select Astra for a subagent unless the user specifically requests it. Never use Opus subagents unless the user specifically requests it. Run every subagent (implementation, research, reviews, fixes, final review) on Sonnet 5.5 at medium reasoning effort or lower; use high reasoning only for implementation plans/specifications.
+- Never select Astra for a subagent unless the user specifically requests it. Run every subagent (implementation, research, task reviews, fixes) on Sonnet 5.5 at medium reasoning effort or lower; the final whole-branch review alone uses Opus 5.5 at medium reasoning effort, and no other subagent uses Opus unless the user specifically requests it; use high reasoning only for implementation plans/specifications.
 - This is a greenfield workspace, inspected as empty and not a Git repository. The only files supplied by this planning assignment are this plan, its design brief, and the reference image. All product/configuration/test files listed below are future work.
 - To honor the user's no-code request, this plan specifies exact files, interfaces, behavior, commands, and Given/When/Then tests in prose. It intentionally contains no executable product or test snippets.
 
