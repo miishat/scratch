@@ -181,7 +181,7 @@ export function UpdateNotice({ store = offlineStore }: { store?: OfflineStore })
   // Live regions only speak changes to a region that already exists, so one stays
   // mounted: on the page, and inside the topmost dialog (which hides the page from
   // assistive technology). Only the one where the person is looking holds the text.
-  const liveProps = { className: 'visually-hidden', 'aria-live': 'polite' as const, 'data-update-live': '' }
+  const liveProps = { className: 'visually-hidden', 'aria-live': 'polite' as const, 'aria-atomic': true, 'data-update-live': '' }
   const hasBanner = (offline.updateReady && !asking) || failure !== null
 
   return <>

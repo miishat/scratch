@@ -125,7 +125,7 @@ describe('UpdateNotice', () => {
     expect(update).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
     expect(draft.discard).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Not updated. Your note was not saved: Storage is full.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not updated. Your note was not saved: Storage is full.')
     expect(store.getState().updateReady).toBe(true)
   })
 
