@@ -31,6 +31,8 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
   // Parent links remembered from earlier snapshots, so a deleted collection can
   // still be walked up. Holds ids only.
   const [known, setKnown] = useState(() => new Map<ItemId, ItemId | null>())
+  // Ids this tab deleted on purpose; falling back from them needs no notice.
+  const [deleted, setDeleted] = useState<ReadonlySet<ItemId>>(() => new Set())
   const [seenItems, setSeenItems] = useState<LibraryItem[] | null>(null)
   if (items && items !== seenItems) {
     setSeenItems(items)
@@ -43,7 +45,9 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
     [items, requested, known],
   )
   const route = resolved.route
-  const message = raw.valid ? resolved.message : INVALID_ROUTE_MESSAGE
+  const deliberate = (requested.collectionId !== null && deleted.has(requested.collectionId))
+    || (requested.noteId !== undefined && deleted.has(requested.noteId))
+  const message = !raw.valid ? INVALID_ROUTE_MESSAGE : deliberate ? null : resolved.message
   const routeRef = useRef(route)
 
   // Make the address bar match what is shown, without adding a history entry.
@@ -120,6 +124,10 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
     else void navigate(route.noteId ? { collectionId: route.collectionId } : { collectionId: parentOfCurrent })
   }, [navigate, parentOfCurrent, route.noteId, route.collectionId])
 
+  const acknowledgeDeletion = useCallback((ids: ItemId[]): void => {
+    setDeleted((current) => new Set([...current, ...ids]))
+  }, [])
+
   const value = useMemo<NavigationValue>(() => ({
     route,
     message,
@@ -129,7 +137,8 @@ export function NavigationProvider({ items, children }: { items: LibraryItem[] |
     closeNote: () => navigate({ collectionId: route.collectionId }),
     navigateBack,
     registerGuard,
-  }), [route, message, navigate, navigateBack, registerGuard])
+    acknowledgeDeletion,
+  }), [route, message, navigate, navigateBack, registerGuard, acknowledgeDeletion])
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>
 }

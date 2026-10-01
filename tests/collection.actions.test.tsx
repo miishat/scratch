@@ -14,6 +14,7 @@ import {
   moveItem,
   resetRepositoryForTests,
   updateCollection,
+  updateNote,
 } from '../src/features/library/repository'
 import { closeDatabase, deleteDatabase, useDatabaseName } from '../src/features/library/database'
 
@@ -370,5 +371,187 @@ describe('delete', () => {
     expect(screen.getByRole('link', { name: 'Kept' })).toBeInTheDocument()
     await waitFor(() => expect(document.activeElement).not.toBe(document.body))
     expect(document.body.contains(document.activeElement)).toBe(true)
+    // The person deleted it on purpose; the Deleted toast is enough.
+    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument()
+  })
+
+  it('still says a collection is gone when another tab deleted the one being viewed', async () => {
+    const parent = await seedCollection('Outer', null)
+    const child = await seedCollection('Inner', parent)
+    await openApp(`#/c/${child}`)
+    await screen.findByRole('heading', { name: 'Inner' })
+    const gone = await deleteItem(session, { ...(await context()).context, expectedVersion: 1 }, child)
+    expect(gone.ok).toBe(true)
+    const channel = new BroadcastChannel('scratch-v1-changes')
+    channel.postMessage({ vaultId: session.header.vaultId, generation: session.generation, revision: 99 })
+    channel.close()
+    expect(await screen.findByText(/no longer available/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Outer' })).toBeInTheDocument()
+  })
+})
+
+// Another tab writes without this tab hearing about it, so the open dialog holds a
+// stale revision (and, in some cases, a stale item version). The first attempt
+// conflicts and refreshes; the retry must then use what is live now.
+describe('retrying after another tab wrote', () => {
+  async function liveVersion(id: string): Promise<number> {
+    return (await items()).find((item) => item.id === id)!.version
+  }
+
+  async function renameElsewhere(id: string, title: string) {
+    const latest = await context()
+    const item = latest.items.find((candidate) => candidate.id === id)!
+    const result = await updateCollection(session, { ...latest.context, expectedVersion: item.version }, id, { parentId: item.parentId, title, color: item.color ?? 'sage' })
+    if (!result.ok) throw new Error(result.message)
+  }
+
+  async function deleteElsewhere(id: string) {
+    const latest = await context()
+    const item = latest.items.find((candidate) => candidate.id === id)!
+    const result = await deleteItem(session, { ...latest.context, expectedVersion: item.version }, id)
+    if (!result.ok) throw new Error(result.message)
+  }
+
+  async function openEdit(user: User, name: string, title: string) {
+    await chooseAction(user, name, 'Edit collection')
+    const dialog = await screen.findByRole('dialog', { name: 'Edit collection' })
+    const field = within(dialog).getByRole('textbox', { name: 'Title' })
+    await user.clear(field)
+    await user.type(field, title)
+    return dialog
+  }
+
+  async function saveTwice(user: User, dialog: HTMLElement) {
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed/i))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  }
+
+  it('renames after an unrelated write in another tab', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const user = await openApp()
+    const dialog = await openEdit(user, 'Inbox', 'Projects')
+    await seedCollection('Elsewhere', null)
+    await saveTwice(user, dialog)
+    await screen.findByText('Saved')
+    expect((await items()).find((item) => item.id === parent)).toMatchObject({ title: 'Projects', version: 2 })
+  })
+
+  it('renames after the same collection was renamed in another tab, and the retry is explicit', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const user = await openApp()
+    const dialog = await openEdit(user, 'Inbox', 'Projects')
+    await renameElsewhere(parent, 'Inbox renamed elsewhere')
+    await saveTwice(user, dialog)
+    await screen.findByText('Saved')
+    expect((await items()).find((item) => item.id === parent)).toMatchObject({ title: 'Projects', version: 3 })
+    expect(updateCollection).toHaveBeenCalledTimes(3)
+  })
+
+  it('says so and offers only Close when the collection was deleted elsewhere during a rename', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const user = await openApp()
+    const dialog = await openEdit(user, 'Inbox', 'Projects')
+    await deleteElsewhere(parent)
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
+    expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await items()).toHaveLength(0)
+  })
+
+  async function openMove(user: User) {
+    await chooseAction(user, 'Goes', 'Move')
+    const dialog = await screen.findByRole('dialog', { name: 'Move' })
+    await user.click(within(dialog).getByRole('radio', { name: 'Scratch' }))
+    return dialog
+  }
+
+  async function moveTwice(user: User, dialog: HTMLElement) {
+    await user.click(within(dialog).getByRole('button', { name: 'Move here' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed/i))
+    await user.click(within(dialog).getByRole('button', { name: 'Move here' }))
+  }
+
+  it('moves after an unrelated write in another tab', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const goes = await seedNote('Goes', parent)
+    const user = await openApp(`#/c/${parent}`)
+    const dialog = await openMove(user)
+    await seedCollection('Elsewhere', null)
+    await moveTwice(user, dialog)
+    await screen.findByText('Moved to Scratch')
+    expect((await items()).find((item) => item.id === goes)?.parentId).toBeNull()
+  })
+
+  it('moves after the note itself was edited in another tab', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const goes = await seedNote('Goes', parent)
+    const user = await openApp(`#/c/${parent}`)
+    const dialog = await openMove(user)
+    const latest = await context()
+    const written = await updateNote(session, { ...latest.context, expectedVersion: 1 }, goes, { parentId: parent, title: 'Goes', body: 'edited elsewhere', isSecret: false })
+    expect(written.ok).toBe(true)
+    await moveTwice(user, dialog)
+    await screen.findByText('Moved to Scratch')
+    expect((await items()).find((item) => item.id === goes)).toMatchObject({ parentId: null, body: 'edited elsewhere' })
+  })
+
+  it('says so and offers only Close when the item was deleted elsewhere during a move', async () => {
+    const parent = await seedCollection('Inbox', null)
+    const goes = await seedNote('Goes', parent)
+    const user = await openApp(`#/c/${parent}`)
+    const dialog = await openMove(user)
+    await deleteElsewhere(goes)
+    await user.click(within(dialog).getByRole('button', { name: 'Move here' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
+    expect(within(dialog).queryByRole('button', { name: 'Move here' })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  async function openDelete(user: User) {
+    await chooseAction(user, 'Archive', 'Delete')
+    return screen.findByRole('dialog', { name: 'Delete collection' })
+  }
+
+  async function deleteAfterReview(user: User, dialog: HTMLElement) {
+    await user.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    await user.click(await within(dialog).findByRole('button', { name: 'Review updated count' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+  }
+
+  it('deletes after an unrelated write in another tab, once the person has reviewed', async () => {
+    const top = await seedCollection('Archive', null)
+    const user = await openApp()
+    const dialog = await openDelete(user)
+    await seedCollection('Elsewhere', null)
+    await deleteAfterReview(user, dialog)
+    await screen.findByText('Deleted')
+    expect((await items()).some((item) => item.id === top)).toBe(false)
+  })
+
+  it('deletes after the collection itself was renamed in another tab, once the person has reviewed', async () => {
+    const top = await seedCollection('Archive', null)
+    const user = await openApp()
+    const dialog = await openDelete(user)
+    await renameElsewhere(top, 'Archive renamed')
+    expect(await liveVersion(top)).toBe(2)
+    await deleteAfterReview(user, dialog)
+    await screen.findByText('Deleted')
+    expect((await items()).some((item) => item.id === top)).toBe(false)
+  })
+
+  it('says so and offers only Close when the collection was deleted elsewhere', async () => {
+    const top = await seedCollection('Archive', null)
+    const user = await openApp()
+    const dialog = await openDelete(user)
+    await deleteElsewhere(top)
+    await user.click(within(dialog).getByRole('button', { name: 'Delete permanently' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent(/no longer exists/i))
+    expect(within(dialog).queryByRole('button', { name: 'Delete permanently' })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

@@ -17,6 +17,9 @@ export interface NavigationValue {
   closeNote: () => Promise<boolean>
   navigateBack: () => void
   registerGuard: (guard: NavigationGuard) => () => void
+  // Tells the router these items were just deleted on purpose in this tab, so
+  // falling back from a view of one of them is not reported as a missing item.
+  acknowledgeDeletion: (ids: ItemId[]) => void
 }
 
 export const NavigationContext = createContext<NavigationValue | null>(null)

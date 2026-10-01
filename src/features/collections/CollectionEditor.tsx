@@ -21,7 +21,8 @@ type Props =
 
 // One editor for a new collection and for renaming or recoloring an existing one.
 // An existing collection is saved against the version it had when the editor
-// opened, so a change made elsewhere meanwhile is reported, never overwritten.
+// opened, so a change made elsewhere meanwhile is reported, never overwritten. After
+// that report the retry uses the refreshed version, so it is the person's explicit choice.
 export function CollectionEditor({ parentId, collection, onClose }: Props) {
   const library = useLibrary()
   const [title, setTitle] = useState(collection?.title ?? '')
@@ -29,10 +30,14 @@ export function CollectionEditor({ parentId, collection, onClose }: Props) {
   const [failure, setFailure] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const busy = useRef(false)
+  // After a conflict the retry uses the live version from the refreshed snapshot.
+  const retrying = useRef(false)
   const titleRef = useRef<HTMLInputElement>(null)
   const titleId = useId()
   const errorId = useId()
   const items = library.snapshot?.items ?? []
+  const live = collection ? items.find((candidate) => candidate.id === collection.id) : undefined
+  const removed = collection !== undefined && library.snapshot !== null && !live
   const parent = collection ? collection.parentId : parentId
   const where = ['Scratch', ...collectionPath(items, parent).map((item) => item.title ?? '')].join(' / ')
 
@@ -53,8 +58,9 @@ export function CollectionEditor({ parentId, collection, onClose }: Props) {
     busy.current = true
     setSaving(true)
     setFailure(null)
+    const expectedVersion = collection && retrying.current && live ? live.version : collection?.version
     const result = await library.runMutation((session, context) => collection
-      ? updateCollection(session, { ...context, expectedVersion: collection.version }, collection.id, input)
+      ? updateCollection(session, { ...context, expectedVersion }, collection.id, input)
       : createCollection(session, context, input))
     busy.current = false
     setSaving(false)
@@ -64,8 +70,21 @@ export function CollectionEditor({ parentId, collection, onClose }: Props) {
     }
     setFailure(result.message)
     // A conflict means the library moved on; load it so a retry starts current.
-    if (result.code === 'conflict') void library.refresh()
+    if (result.code === 'conflict') {
+      retrying.current = true
+      void library.refresh()
+    }
     titleRef.current?.focus()
+  }
+
+  // The collection was removed in another tab: nothing is left to edit.
+  if (removed) {
+    return <Dialog title="Edit collection" className="organize-dialog" initialFocus="[data-autofocus]" onRequestClose={() => onClose('closed')} canClose={() => true}>
+      <div className="organize-form">
+        <p role="alert">This item no longer exists.</p>
+        <div className="dialog-actions"><button data-autofocus="" type="button" onClick={() => onClose('closed')}>Close</button></div>
+      </div>
+    </Dialog>
   }
 
   return <Dialog

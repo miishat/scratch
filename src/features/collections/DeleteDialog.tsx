@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigation } from '../../app/useNavigation'
 import { Dialog } from '../../components/Dialog'
 import { useLibrary } from '../library/LibraryProvider'
 import { descendantsOf } from '../library/hierarchy'
@@ -15,6 +16,7 @@ export type DeleteResult = 'deleted' | 'closed'
 // the updated count, and the repository separately refuses a stale delete.
 export function DeleteDialog({ item, onClose }: { item: LibraryItem, onClose: (result: DeleteResult) => void }) {
   const library = useLibrary()
+  const navigation = useNavigation()
   const snapshot = library.snapshot
   const isCollection = item.kind === 'collection'
   const descendants = snapshot && isCollection ? descendantsOf(snapshot.items, item.id) : []
@@ -27,6 +29,10 @@ export function DeleteDialog({ item, onClose }: { item: LibraryItem, onClose: (r
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const busy = useRef(false)
+  // Set once a delete conflicted. The retry then uses the item's version from the
+  // refreshed snapshot, which the person has just reviewed, instead of the version
+  // from when the dialog opened (which could never match again).
+  const retrying = useRef(false)
 
   const live = snapshot?.items.find((candidate) => candidate.id === item.id)
   const stale = reviewed !== contents
@@ -37,7 +43,15 @@ export function DeleteDialog({ item, onClose }: { item: LibraryItem, onClose: (r
     busy.current = true
     setSaving(true)
     setNotice(null)
-    const result = await library.runMutation((session, context) => deleteItem(session, { ...context, expectedVersion: item.version }, item.id))
+    const expectedVersion = retrying.current && live ? live.version : item.version
+    const removed = [item.id, ...descendants]
+    const result = await library.runMutation(async (session, context) => {
+      const outcome = await deleteItem(session, { ...context, expectedVersion }, item.id)
+      // Told before the snapshot changes, so a view of what was just deleted does not
+      // report it as missing. The Deleted toast already says what happened.
+      if (outcome.ok) navigation.acknowledgeDeletion(removed)
+      return outcome
+    })
     busy.current = false
     setSaving(false)
     if (result.ok) {
@@ -47,6 +61,7 @@ export function DeleteDialog({ item, onClose }: { item: LibraryItem, onClose: (r
     setNotice(result.message)
     if (result.code === 'conflict') {
       // Nothing was deleted. Withdraw the confirmation and load what changed.
+      retrying.current = true
       setReviewed(null)
       await library.refresh()
     }
