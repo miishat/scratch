@@ -275,6 +275,9 @@ test.describe('keyboard only', () => {
     await createLibrary(page)
     await addCollection(page, 'Target')
     await addNote(page, { body: 'Movable note' })
+    // The editor hands focus back to Add a moment after it unmounts; wait for that so the
+    // test's own focus is not taken away.
+    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
     const more = page.getByRole('button', { name: 'More actions for Movable note' })
     await more.focus()
     await page.keyboard.press('Enter')
@@ -323,6 +326,7 @@ test.describe('keyboard only', () => {
   test('search by keyboard: type, reach the results, clear with the keyboard', async ({ page }) => {
     await createLibrary(page)
     await addNote(page, { body: 'Findable pear note' })
+    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
     await page.getByRole('searchbox', { name: 'Search' }).focus()
     await page.keyboard.type('pear')
     await expect(page.getByRole('list', { name: 'Search results' })).toBeVisible()
@@ -370,16 +374,20 @@ test.describe('keyboard only', () => {
     expect(where, 'focus after closing the import dialog').not.toBe('body')
   })
 
-  test('the page itself has a complete focus order with no trap', async ({ page }) => {
+  test('the page itself has a complete focus order with no trap', async ({ page, browserName }) => {
     await createLibrary(page)
     await addCollection(page, 'Order')
     await addNote(page, { body: 'Order note' })
+    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
     await page.locator('body').click({ position: { x: 1, y: 1 } })
     await page.keyboard.press('Tab')
     const order = await tabCycle(page, 60)
     expect(order).toContain('button:Add')
     expect(order).toContain('button:Settings')
-    expect(order.some((entry) => entry.startsWith('a:Order'))).toBe(true)
+    // Tiles are links. Safari and its WebKit port skip links when Tab is pressed unless the
+    // person turns on "Press Tab to highlight each item" (Option+Tab otherwise), so this
+    // part is asserted on the other engines; every tile also has Copy and menu buttons.
+    if (browserName !== 'webkit') expect(order.some((entry) => entry.startsWith('a:Order'))).toBe(true)
   })
 })
 
