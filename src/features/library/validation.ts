@@ -10,9 +10,12 @@ export interface ValidationIssue {
   message: string
 }
 
-const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// Created on first use, not at import: a browser without Intl.Segmenter must still load
+// the app far enough to show the unsupported-browser screen.
+let graphemeSegmenter: Intl.Segmenter | undefined
 
 export function countGraphemes(text: string): number {
+  graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' })
   return Array.from(graphemeSegmenter.segment(text)).length
 }
 

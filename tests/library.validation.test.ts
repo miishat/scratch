@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   APP_LIMITS,
   type CollectionColor,
@@ -251,5 +251,19 @@ describe('display labels', () => {
 
   it('uses the explicit title when present', () => {
     expect(displayTitle(fixtureOpenAiSecret)).toBe('OpenAI')
+  })
+})
+
+describe('loading without Intl.Segmenter', () => {
+  it('imports without throwing, so the unsupported-browser screen can render', async () => {
+    const original = Intl.Segmenter
+    vi.resetModules()
+    Object.defineProperty(Intl, 'Segmenter', { value: undefined, configurable: true, writable: true })
+    try {
+      await expect(import('../src/features/library/validation')).resolves.toBeDefined()
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', { value: original, configurable: true, writable: true })
+      vi.resetModules()
+    }
   })
 })
