@@ -1,0 +1,101 @@
+import type { Generation, VaultId } from './types'
+
+// Cross-tab change notifications. They carry only identifiers and revisions so a
+// receiving tab can reload clean state; they never carry content, queries, keys,
+// or passphrases. BroadcastChannel is used when available; otherwise the tab
+// falls back to refreshing when the window regains focus.
+
+export interface ChangeNotification {
+  vaultId: VaultId
+  generation: Generation
+  revision: number
+}
+
+// A null change means "reload and compare" from the focus fallback, which has no
+// revision to report.
+export type ChangeListener = (change: ChangeNotification | null) => void
+
+export interface ChangeSubscription {
+  unsubscribe(): void
+  // Hold automatic handling; a change that arrives while held is delivered when
+  // the hold is released. Callers use this to preserve a dirty editor.
+  defer(): void
+  resume(): void
+}
+
+const CHANNEL_NAME = 'scratch-v1-changes'
+
+let channel: BroadcastChannel | null = null
+
+function changeChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null
+  if (!channel) channel = new BroadcastChannel(CHANNEL_NAME)
+  return channel
+}
+
+function isChangeNotification(value: unknown): value is ChangeNotification {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.vaultId === 'string' &&
+    typeof candidate.generation === 'number' &&
+    typeof candidate.revision === 'number'
+  )
+}
+
+export function publishChange(change: ChangeNotification): void {
+  const current = changeChannel()
+  if (!current) return
+  current.postMessage(change)
+}
+
+export function subscribeToChanges(listener: ChangeListener): ChangeSubscription {
+  let deferred = false
+  let pending: ChangeNotification | null | undefined
+
+  const deliver = (change: ChangeNotification | null): void => {
+    if (deferred) {
+      pending = change
+      return
+    }
+    listener(change)
+  }
+
+  const current = changeChannel()
+  const onMessage = (event: MessageEvent): void => {
+    deliver(isChangeNotification(event.data) ? event.data : null)
+  }
+  if (current) current.addEventListener('message', onMessage)
+
+  const onFocus = (): void => {
+    if (!current) deliver(null)
+  }
+  if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
+
+  return {
+    defer(): void {
+      deferred = true
+    },
+    resume(): void {
+      if (!deferred) return
+      deferred = false
+      if (pending === undefined) return
+      const next = pending
+      pending = undefined
+      listener(next)
+    },
+    unsubscribe(): void {
+      if (current) current.removeEventListener('message', onMessage)
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
+    },
+  }
+}
+
+// Release the shared channel. Used by test isolation; in the app the channel
+// lives for the page.
+export function closeChangeChannel(): void {
+  if (channel) {
+    channel.close()
+    channel = null
+  }
+}
