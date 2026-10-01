@@ -58,18 +58,14 @@ export function publishChange(change: ChangeNotification): void {
 }
 
 export function subscribeToChanges(listener: ChangeListener): ChangeSubscription {
-  const deliver = (change: ChangeNotification | null): void => {
-    listener(change)
-  }
-
   const current = changeChannel()
   const onMessage = (event: MessageEvent): void => {
-    deliver(isChangeNotification(event.data) ? event.data : null)
+    listener(isChangeNotification(event.data) ? event.data : null)
   }
   if (current) current.addEventListener('message', onMessage)
 
   const onFocus = (): void => {
-    if (!current) deliver(null)
+    if (!current) listener(null)
   }
   if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
 

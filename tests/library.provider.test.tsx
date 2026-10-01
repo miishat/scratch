@@ -238,4 +238,46 @@ describe('LibraryProvider semantics', () => {
       expect(vi.mocked(loadLibrary).mock.calls.length).toBe(callsBefore + 1)
     },
   )
+
+  it.skipIf(typeof BroadcastChannel === 'undefined')(
+    'ignores a hold released after lock and never reloads or restores the snapshot',
+    async () => {
+      const init = await initializeLibrary(vault)
+      if (!init.ok) throw new Error(init.message)
+      const { rerender } = render(
+        <LibraryProvider session={init.session}>
+          <Probe />
+        </LibraryProvider>,
+      )
+      await waitFor(() => expect(captured.value?.status).toBe('ready'))
+      const before = captured.value!.snapshot!
+
+      let release!: () => void
+      act(() => {
+        release = captured.value!.holdRefresh()
+      })
+      const channel = new BroadcastChannel('scratch-v1-changes')
+      try {
+        channel.postMessage({ vaultId: before.header.vaultId, generation: before.meta.generation, revision: 99 })
+        await waitFor(() => expect(captured.value?.remoteChangePending).toBe(true))
+      } finally {
+        channel.close()
+      }
+      rerender(
+        <LibraryProvider session={null}>
+          <Probe />
+        </LibraryProvider>,
+      )
+      await waitFor(() => expect(captured.value?.status).toBe('locked'))
+      const callsBefore = vi.mocked(loadLibrary).mock.calls.length
+
+      await act(async () => {
+        release()
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      })
+      expect(vi.mocked(loadLibrary).mock.calls.length).toBe(callsBefore)
+      expect(captured.value?.snapshot).toBeNull()
+      expect(captured.value?.status).toBe('locked')
+    },
+  )
 })

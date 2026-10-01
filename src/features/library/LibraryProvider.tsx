@@ -112,13 +112,18 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
 
     return () => {
       epoch.current += 1
+      holds.current = 0
+      pendingRefresh.current = false
       subscription.unsubscribe()
     }
   }, [session, refresh])
 
   const holdRefresh = useCallback((): (() => void) => {
     holds.current += 1
+    const heldIn = epoch.current
     return () => {
+      // A release that outlives its session must not touch the new state.
+      if (epoch.current !== heldIn) return
       holds.current = Math.max(0, holds.current - 1)
       if (holds.current === 0 && pendingRefresh.current) {
         void refresh()
