@@ -401,10 +401,49 @@ describe('editing an existing note', () => {
     expect(screen.getByRole('region', { name: 'Your draft' })).toHaveTextContent('my draft')
     expect((await notes())[0]).toMatchObject({ body: 'newer elsewhere', version: 2 })
     expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+    // The other tab wrote once; Save tried twice (stale revision, then fresh revision refused by the note's own version).
+    expect(updateNote).toHaveBeenCalledTimes(3)
 
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByRole('textbox', { name: 'Note body' })).toHaveValue('my draft')
     expect((await notes())[0].body).toBe('newer elsewhere')
+  })
+
+  it('saves an in-place edit once after an unrelated write in another tab', async () => {
+    await seed()
+    const user = await openApp({ hash: `#/c/${collectionId}/n/${noteId}` })
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByRole('textbox', { name: 'Note body' }), ' and bread')
+    const other = await currentContext()
+    const made = await createNote(session, other.context, { parentId: null, title: 'Unrelated', body: 'elsewhere', isSecret: false })
+    expect(made.ok).toBe(true)
+    const channel = new BroadcastChannel('scratch-v1-changes')
+    channel.postMessage({ vaultId: session.header.vaultId, generation: session.generation, revision: 99 })
+    channel.close()
+    await screen.findByText(/Another tab changed this library./)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText('Saved')
+    expect(screen.queryByRole('region', { name: 'Latest' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/changed elsewhere/)).not.toBeInTheDocument()
+    const all = await notes()
+    expect(all.find((note) => note.id === noteId)).toMatchObject({ body: 'milk and eggs and bread', version: 2 })
+    expect(all.find((note) => note.title === 'Unrelated')).toBeDefined()
+    // One refused attempt on the stale revision, then exactly one committed write.
+    expect(updateNote).toHaveBeenCalledTimes(2)
+  })
+
+  it('still blocks an in-place edit when the retry finds a replaced library', async () => {
+    await seed()
+    const user = await openApp({ hash: `#/c/${collectionId}/n/${noteId}` })
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByRole('textbox', { name: 'Note body' }), ' more')
+    vi.mocked(updateNote)
+      .mockResolvedValueOnce({ ok: false, code: 'conflict', message: 'Another tab changed this library. Review the latest version and try again.' })
+      .mockResolvedValueOnce({ ok: false, code: 'vault-changed', message: 'This library was replaced. Unlock the current library to continue.' })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('region', { name: 'Library replaced' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save as new note' })).not.toBeInTheDocument()
+    expect((await notes())[0].body).toBe('milk and eggs')
   })
 
   it('saves the draft as a new note without overwriting the latest', async () => {

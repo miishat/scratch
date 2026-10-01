@@ -160,16 +160,21 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
       } catch {
         result = { ok: false, code: 'unavailable', message: UNAVAILABLE }
       }
-      // A new note has no identity to conflict with, so a revision-only
-      // conflict (another tab saved something else) is retried once against a
-      // refreshed context. Notes that already exist never retry.
-      if (!result.ok && result.code === 'conflict' && !base) {
+      // The revision is library-wide, and a dirty editor holds refresh, so a write
+      // in another tab (even an unrelated one) makes the first attempt conflict. One
+      // retry runs against a freshly read context. An existing note keeps its own
+      // version check, so the repository still refuses if this note itself changed
+      // and the conflict panel then shows. A replaced library never retries.
+      if (!result.ok && result.code === 'conflict') {
         try {
           const active = latest.current.session
           const fresh = active ? await freshContext(active) : null
           if (fresh && !fresh.ok) result = { ok: false, ...fresh.failure }
           else if (fresh) {
-            result = await latest.current.library.runMutation((current) => createNote(current, fresh.context, input))
+            result = await latest.current.library.runMutation((current) =>
+              base
+                ? updateNote(current, { ...fresh.context, expectedVersion: base.version }, base.id, input)
+                : createNote(current, fresh.context, input))
           }
         } catch {
           result = { ok: false, code: 'unavailable', message: UNAVAILABLE }
