@@ -432,10 +432,11 @@ async function snapshotFromStored(
 }
 
 // Runs after a transaction has committed. Neither the persistence request nor
-// the notification may fail the mutation result.
+// the notification may fail or delay the mutation result; the request can sit on
+// a browser permission prompt, so it is fire and forget.
 async function completeMutation(result: MutationResult): Promise<MutationResult> {
   if (!result.ok) return result
-  await requestPersistence()
+  void requestPersistence().catch(() => undefined)
   publishChange({
     vaultId: result.snapshot.header.vaultId,
     generation: result.snapshot.meta.generation,

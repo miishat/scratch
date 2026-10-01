@@ -17,10 +17,6 @@ export type ChangeListener = (change: ChangeNotification | null) => void
 
 export interface ChangeSubscription {
   unsubscribe(): void
-  // Hold automatic handling; a change that arrives while held is delivered when
-  // the hold is released. Callers use this to preserve a dirty editor.
-  defer(): void
-  resume(): void
 }
 
 const CHANNEL_NAME = 'scratch-v1-changes'
@@ -62,14 +58,7 @@ export function publishChange(change: ChangeNotification): void {
 }
 
 export function subscribeToChanges(listener: ChangeListener): ChangeSubscription {
-  let deferred = false
-  let pending: ChangeNotification | null | undefined
-
   const deliver = (change: ChangeNotification | null): void => {
-    if (deferred) {
-      pending = change
-      return
-    }
     listener(change)
   }
 
@@ -85,17 +74,6 @@ export function subscribeToChanges(listener: ChangeListener): ChangeSubscription
   if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
 
   return {
-    defer(): void {
-      deferred = true
-    },
-    resume(): void {
-      if (!deferred) return
-      deferred = false
-      if (pending === undefined) return
-      const next = pending
-      pending = undefined
-      listener(next)
-    },
     unsubscribe(): void {
       if (current) current.removeEventListener('message', onMessage)
       if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)

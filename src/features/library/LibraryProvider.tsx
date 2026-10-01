@@ -27,6 +27,9 @@ export interface LibraryContextValue {
   snapshot: LibrarySnapshot | null
   status: LibraryStatus
   error: string | null
+  // True when a remote change arrived while refresh was held. The snapshot is
+  // left untouched so a dirty editor can offer a conflict/refresh choice.
+  remoteChangePending: boolean
   refresh: () => Promise<void>
   runMutation: (run: MutationRunner) => Promise<MutationResult>
   clearUnlockedState: () => void
@@ -47,8 +50,13 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
   const [status, setStatus] = useState<LibraryStatus>('locked')
   const [error, setError] = useState<string | null>(null)
   const [activeSession, setActiveSession] = useState<VaultSession | null>(null)
+  const [remoteChangePending, setRemoteChangePending] = useState(false)
   const holds = useRef(0)
   const pendingRefresh = useRef(false)
+  // Bumped whenever the session ends or the unlocked state is cleared. Async work
+  // captures the value at start and drops its result if it has moved on, so a
+  // pending load or mutation can never put a decrypted snapshot back after lock.
+  const epoch = useRef(0)
 
   // Reset decrypted state during render whenever the session identity changes,
   // so a stale snapshot can never survive a lock or vault replacement.
@@ -56,68 +64,54 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
     setActiveSession(session)
     setSnapshot(null)
     setError(null)
+    setRemoteChangePending(false)
     setStatus(session ? 'loading' : 'locked')
   }
 
   const clearUnlockedState = useCallback((): void => {
+    epoch.current += 1
+    pendingRefresh.current = false
     setSnapshot(null)
     setStatus('locked')
     setError(null)
+    setRemoteChangePending(false)
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!session) return
+    const started = epoch.current
+    pendingRefresh.current = false
+    let next: { snapshot: LibrarySnapshot | null; error: string | null }
     try {
       const result = await loadLibrary(session)
-      if (result.ok) {
-        setSnapshot(result.snapshot)
-        setError(null)
-        setStatus('ready')
-        return
-      }
-      setSnapshot(null)
-      setError(result.message)
-      setStatus('error')
+      next = result.ok
+        ? { snapshot: result.snapshot, error: null }
+        : { snapshot: null, error: result.message }
     } catch {
-      setSnapshot(null)
-      setError('Local storage is unavailable. Try again.')
-      setStatus('error')
+      next = { snapshot: null, error: 'Local storage is unavailable. Try again.' }
     }
+    if (epoch.current !== started) return
+    setSnapshot(next.snapshot)
+    setError(next.error)
+    setStatus(next.error === null ? 'ready' : 'error')
+    setRemoteChangePending(false)
   }, [session])
 
   useEffect(() => {
     if (!session) return
-    let active = true
-    void loadLibrary(session)
-      .then((result) => {
-        if (!active) return
-        if (result.ok) {
-          setSnapshot(result.snapshot)
-          setError(null)
-          setStatus('ready')
-        } else {
-          setSnapshot(null)
-          setError(result.message)
-          setStatus('error')
-        }
-      })
-      .catch(() => {
-        if (!active) return
-        setSnapshot(null)
-        setError('Local storage is unavailable. Try again.')
-        setStatus('error')
-      })
+    void refresh()
 
     const subscription = subscribeToChanges(() => {
       if (holds.current > 0) {
         pendingRefresh.current = true
+        setRemoteChangePending(true)
         return
       }
       void refresh()
     })
 
     return () => {
-      active = false
+      epoch.current += 1
       subscription.unsubscribe()
     }
   }, [session, refresh])
@@ -127,7 +121,6 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
     return () => {
       holds.current = Math.max(0, holds.current - 1)
       if (holds.current === 0 && pendingRefresh.current) {
-        pendingRefresh.current = false
         void refresh()
       }
     }
@@ -138,12 +131,13 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
       if (!session || !snapshot) {
         return { ok: false, code: 'unavailable', message: 'This library is locked.' }
       }
+      const started = epoch.current
       const context: MutationContext = {
         generation: snapshot.meta.generation,
         expectedRevision: snapshot.meta.revision,
       }
       const result = await run(session, context)
-      if (result.ok) {
+      if (result.ok && epoch.current === started) {
         setSnapshot(result.snapshot)
         setError(null)
         setStatus('ready')
@@ -154,8 +148,8 @@ export function LibraryProvider({ session, children }: LibraryProviderProps): Re
   )
 
   const value = useMemo<LibraryContextValue>(
-    () => ({ snapshot, status, error, refresh, runMutation, clearUnlockedState, holdRefresh }),
-    [snapshot, status, error, refresh, runMutation, clearUnlockedState, holdRefresh],
+    () => ({ snapshot, status, error, remoteChangePending, refresh, runMutation, clearUnlockedState, holdRefresh }),
+    [snapshot, status, error, remoteChangePending, refresh, runMutation, clearUnlockedState, holdRefresh],
   )
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>

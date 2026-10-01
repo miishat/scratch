@@ -551,6 +551,20 @@ describe('repository persistence request', () => {
     expect(getPersistenceState()).toBe('denied')
   })
 
+  it('does not wait on a persistence prompt that never resolves', async () => {
+    const persist = vi.fn().mockReturnValue(new Promise<boolean>(() => {}))
+    vi.stubGlobal('navigator', { storage: { persist } })
+
+    const { session, snapshot } = await setup()
+    const created = await Promise.race([
+      createNote(session, contextOf(snapshot), noteInput('saved while prompt pending')),
+      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 2000)),
+    ])
+    expect(created).not.toBe('timeout')
+    expect(persist).toHaveBeenCalled()
+    if (created !== 'timeout') expect(created.ok).toBe(true)
+  })
+
   it('saves successfully when persistent storage is unavailable', async () => {
     vi.stubGlobal('navigator', {})
 
@@ -564,18 +578,14 @@ describe('repository persistence request', () => {
 const hasBroadcastChannel = typeof BroadcastChannel !== 'undefined'
 
 describe('change notifications', () => {
-  it.skipIf(!hasBroadcastChannel)('delivers metadata-only changes and defers while held', async () => {
+  it.skipIf(!hasBroadcastChannel)('delivers metadata-only changes', async () => {
     const channel = new BroadcastChannel('scratch-v1-changes')
     const received: Array<ChangeNotification | null> = []
     const subscription = subscribeToChanges((change) => received.push(change))
     try {
-      subscription.defer()
       const notification: ChangeNotification = { vaultId: 'vault-1', generation: 1, revision: 4 }
       channel.postMessage(notification)
       await new Promise((resolve) => setTimeout(resolve, 30))
-      expect(received).toHaveLength(0)
-
-      subscription.resume()
       expect(received).toHaveLength(1)
       expect(received[0]).toEqual(notification)
       expect(JSON.stringify(received[0])).not.toContain('body')
