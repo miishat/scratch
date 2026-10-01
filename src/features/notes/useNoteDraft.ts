@@ -3,8 +3,9 @@ import { useNavigation } from '../../app/useNavigation'
 import { useLibrary } from '../library/LibraryProvider'
 import { createNote, loadLibrary, updateNote } from '../library/repository'
 import { validateNoteInput } from '../library/validation'
-import type { ItemId, LibraryItem, MutationFailureCode, MutationResult, NoteInput } from '../library/types'
+import type { ItemId, LibraryItem, MutationContext, MutationFailureCode, MutationResult, NoteInput } from '../library/types'
 import type { DraftContent } from '../vault/session'
+import type { VaultSession } from '../vault/types'
 import { useVault } from '../vault/VaultProvider'
 
 // How an editor ended. Saved and saved-new report committed writes; navigated
@@ -47,6 +48,19 @@ function fromNote(note: LibraryItem): NoteDraftValues {
   return { title: note.title ?? '', body: note.body ?? '', isSecret: note.isSecret }
 }
 
+function fromBase(base: { title: string, body: string, isSecret: boolean }): NoteDraftValues {
+  return { title: base.title, body: base.body, isSecret: base.isSecret }
+}
+
+// A recovered edit is only trusted when the note is still exactly what the
+// draft started from. Anything else, including a draft with no recorded
+// baseline, goes to the conflict panel instead of being rebased.
+function recoveredConflicts(note: LibraryItem | undefined, recovered: DraftContent | undefined): boolean {
+  if (!note || !recovered) return false
+  const base = recovered.base
+  return !base || base.version !== note.version || !sameValues(fromBase(base), fromNote(note))
+}
+
 function fromInput(input: NoteInput): NoteDraftValues {
   return { title: input.title ?? '', body: input.body, isSecret: input.isSecret }
 }
@@ -72,12 +86,12 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
 
   // The identity and version the draft started from; later snapshots never
   // change what a save is checked against.
-  const [base] = useState(() => (note ? { id: note.id, version: note.version, parentId: note.parentId } : null))
-  const [initial] = useState<NoteDraftValues>(() => (note ? fromNote(note) : EMPTY))
+  const [base] = useState(() => (note ? { id: note.id, version: recovered ? (recovered.base?.version ?? 0) : note.version, parentId: note.parentId } : null))
+  const [initial] = useState<NoteDraftValues>(() => (note ? (recovered?.base ? fromBase(recovered.base) : fromNote(note)) : EMPTY))
   const [values, setValues] = useState<NoteDraftValues>(() => (recovered ? fromInput(recovered.input) : initial))
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<SaveFailure | null>(null)
-  const [conflict, setConflict] = useState<ConflictKind | null>(null)
+  const [conflict, setConflict] = useState<ConflictKind | null>(() => (recoveredConflicts(note, recovered) ? 'conflict' : null))
   const [confirm, setConfirm] = useState<Confirmation>(null)
   const [released, setReleased] = useState(false)
 
@@ -110,6 +124,18 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
     else if (result.code === 'vault-changed') setConflict('replaced')
   }, [])
 
+  // A freshly read context for a write that must not trust the held snapshot.
+  // A changed generation is a replaced library, never something to write into.
+  const freshContext = useCallback(async (active: VaultSession): Promise<{ ok: true, context: MutationContext } | { ok: false, failure: SaveFailure }> => {
+    const fresh = await loadLibrary(active)
+    if (!fresh.ok) return { ok: false, failure: { code: fresh.code, message: fresh.message } }
+    const held = latest.current.library.snapshot?.meta.generation
+    if (held !== undefined && held !== fresh.snapshot.meta.generation) {
+      return { ok: false, failure: { code: 'vault-changed', message: 'This library was replaced. Unlock the current library to continue.' } }
+    }
+    return { ok: true, context: { generation: fresh.snapshot.meta.generation, expectedRevision: fresh.snapshot.meta.revision } }
+  }, [])
+
   // The one write path shared by Save, the shortcut, and Save and lock. A call
   // made while a write is pending, or after one committed, returns that same
   // outcome instead of writing again.
@@ -134,6 +160,21 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
       } catch {
         result = { ok: false, code: 'unavailable', message: UNAVAILABLE }
       }
+      // A new note has no identity to conflict with, so a revision-only
+      // conflict (another tab saved something else) is retried once against a
+      // refreshed context. Notes that already exist never retry.
+      if (!result.ok && result.code === 'conflict' && !base) {
+        try {
+          const active = latest.current.session
+          const fresh = active ? await freshContext(active) : null
+          if (fresh && !fresh.ok) result = { ok: false, ...fresh.failure }
+          else if (fresh) {
+            result = await latest.current.library.runMutation((current) => createNote(current, fresh.context, input))
+          }
+        } catch {
+          result = { ok: false, code: 'unavailable', message: UNAVAILABLE }
+        }
+      }
       if (result.ok) {
         release()
         latest.current.onClose('saved')
@@ -146,7 +187,7 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
     })()
     inflight.current = run
     return run
-  }, [base, targetParent, release, fail])
+  }, [base, targetParent, release, fail, freshContext])
 
   // Used by the conflict panel: writes the draft as a brand new note against a
   // freshly read library, so the latest persisted version is never replaced.
@@ -167,11 +208,10 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
         if (!active) {
           result = { ok: false, code: 'unavailable', message: 'This library is locked.' }
         } else {
-          const fresh = await loadLibrary(active)
+          const fresh = await freshContext(active)
           result = fresh.ok
-            ? await latest.current.library.runMutation((current) =>
-              createNote(current, { generation: fresh.snapshot.meta.generation, expectedRevision: fresh.snapshot.meta.revision }, input))
-            : fresh
+            ? await latest.current.library.runMutation((current) => createNote(current, fresh.context, input))
+            : { ok: false, ...fresh.failure }
         }
       } catch {
         result = { ok: false, code: 'unavailable', message: UNAVAILABLE }
@@ -189,10 +229,13 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
     })()
     inflight.current = run
     return run
-  }, [targetParent, release])
+  }, [targetParent, release, freshContext])
 
   const requestLeave = useCallback((): boolean => {
-    if (releasedRef.current || sameValues(valuesRef.current, initial)) return true
+    if (releasedRef.current) return true
+    // Leaving while a write is pending could report Saved after discarding.
+    if (inflight.current) return false
+    if (sameValues(valuesRef.current, initial)) return true
     setConfirm('leave')
     return false
   }, [initial])
@@ -219,12 +262,16 @@ export function useNoteDraft({ parentId, note, recovered, onClose, onResume }: O
   useEffect(() => {
     if (!dirty) return
     return registerDraft({
-      read: () => ({ noteId: base?.id ?? null, input: toInput(valuesRef.current, targetParent) }),
+      read: () => ({
+        noteId: base?.id ?? null,
+        input: toInput(valuesRef.current, targetParent),
+        ...(base ? { base: { version: base.version, ...initial } } : {}),
+      }),
       save: () => save(),
       discard: () => release(),
       cancel: () => latest.current.onResume(),
     })
-  }, [dirty, registerDraft, save, release, base, targetParent])
+  }, [dirty, registerDraft, save, release, base, targetParent, initial])
 
   useEffect(() => {
     if (!dirty) return

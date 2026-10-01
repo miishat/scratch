@@ -119,7 +119,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
         <div className="editor-fields" hidden={reviewing}>
           {remoteNotice && <div className="editor-notice" role="status">
             <p>Another tab changed this library. Your draft is unchanged.</p>
-            <button type="button" onClick={() => draft.openConflict('conflict')}>Review latest</button>
+            {draft.isEdit && <button type="button" onClick={() => draft.openConflict('conflict')}>Review latest</button>}
           </div>}
           {showTitle
             ? <div className="editor-title">
@@ -162,6 +162,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
             </label>
             <p id={hintId} className="form-hint">Masked until you reveal it. A secret note needs a title.</p>
           </div>
+          <p role="status" className="form-hint editor-saving">{draft.saving ? 'Saving your note.' : ''}</p>
           {draft.failure && !reviewing && <p role="alert" className="form-error">{draft.failure.message}</p>}
         </div>
         {(confirm || !reviewing) && (confirm
@@ -172,7 +173,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
           </div>
           : <div className="editor-actions">
             <button className="primary-button" type="button" disabled={draft.saving} onClick={() => void submit()}>Save</button>
-            <button type="button" onClick={cancel}>Cancel</button>
+            <button type="button" disabled={draft.saving} onClick={cancel}>Cancel</button>
           </div>)}
       </div>}
   </Dialog>

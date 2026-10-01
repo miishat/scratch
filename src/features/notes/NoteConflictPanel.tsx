@@ -43,7 +43,7 @@ export function NoteConflictPanel({ kind, noteId, draft, message, busy, onKeepEd
   const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
-    if (kind === 'replaced' || !session) return
+    if (kind === 'replaced' || !session || noteId === null) return
     let current = true
     loadLibrary(session).then((result) => {
       if (!current) return
@@ -58,6 +58,19 @@ export function NoteConflictPanel({ kind, noteId, draft, message, busy, onKeepEd
     })
     return () => { current = false }
   }, [kind, session, noteId])
+
+  if (noteId === null && latest.state !== 'replaced') {
+    return <section className="note-conflict" aria-label="Library changed">
+      <h3>The library changed in another tab</h3>
+      <p>Your draft is unchanged and nothing was overwritten.</p>
+      <Version label="Your draft" title={draft.title} body={draft.body} secret={draft.isSecret} />
+      {message && <p role="alert" className="form-error">{message}</p>}
+      <div className="editor-actions">
+        <button className="primary-button" type="button" onClick={onKeepEditing}>Keep editing</button>
+        <button type="button" disabled={busy} onClick={onSaveAsNew}>Try saving again</button>
+      </div>
+    </section>
+  }
 
   if (latest.state === 'replaced') {
     return <section className="note-conflict" aria-label="Library replaced">
@@ -80,7 +93,7 @@ export function NoteConflictPanel({ kind, noteId, draft, message, busy, onKeepEd
       {latest.state === 'error' && <p role="alert">{latest.message}</p>}
       {latest.state === 'deleted' && <section className="conflict-version" aria-label="Latest"><h4>Latest</h4><p>This note was deleted in another tab.</p></section>}
       {latest.state === 'note' && <Version label="Latest" title={latest.note.title ?? ''} body={latest.note.body ?? ''} secret={secretLatest} />}
-      <Version label="Your draft" title={draft.title} body={draft.body} secret={draft.isSecret} />
+      <Version label="Your draft" title={draft.title} body={draft.body} secret={draft.isSecret || secretLatest} />
     </div>
     {message && <p role="alert" className="form-error">{message}</p>}
     {confirming

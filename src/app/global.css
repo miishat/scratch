@@ -77,6 +77,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .editor-secret label { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; }
 .editor-secret input { width: 20px; height: 20px; }
 .editor-secret .form-hint { margin: 0; }
+.editor-saving:empty { display: none; }
 .editor-notice { border-left: 4px solid var(--focus); padding-left: 12px; }
 .editor-notice p { margin: 0 0 8px; }
 .editor-actions { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0 max(16px, env(safe-area-inset-bottom)); background: var(--surface); }

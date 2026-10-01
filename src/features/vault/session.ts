@@ -19,6 +19,16 @@ export interface ActionResult {
 export interface DraftContent {
   noteId: ItemId | null
   input: NoteInput
+  // For an edit of an existing note: the version and the saved values the draft
+  // started from, so recovery can tell whether the note changed meanwhile.
+  base?: DraftBase
+}
+
+export interface DraftBase {
+  version: number
+  title: string
+  body: string
+  isSecret: boolean
 }
 
 // An editor registers one of these while its draft is dirty. The vault drives the
@@ -44,21 +54,35 @@ export function encodeDraft(draft: DraftContent): Uint8Array {
   return encoder.encode(JSON.stringify(draft))
 }
 
+function decodeBase(value: unknown): DraftBase | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { version, title, body, isSecret } = value as Record<string, unknown>
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return null
+  if (typeof title !== 'string' || typeof body !== 'string' || typeof isSecret !== 'boolean') return null
+  return { version, title, body, isSecret }
+}
+
 export function decodeDraft(bytes: Uint8Array): DraftContent | null {
   try {
     const value: unknown = JSON.parse(decoder.decode(bytes))
     if (typeof value !== 'object' || value === null) return null
-    const { noteId, input } = value as Record<string, unknown>
+    const { noteId, input, base } = value as Record<string, unknown>
     if (noteId !== null && typeof noteId !== 'string') return null
     if (typeof input !== 'object' || input === null) return null
     const fields = input as Record<string, unknown>
     if (typeof fields.body !== 'string' || typeof fields.isSecret !== 'boolean') return null
     if (fields.title !== null && typeof fields.title !== 'string') return null
     if (fields.parentId !== null && typeof fields.parentId !== 'string') return null
-    return {
+    const decoded: DraftContent = {
       noteId,
       input: { parentId: fields.parentId, title: fields.title, body: fields.body, isSecret: fields.isSecret },
     }
+    if (base !== undefined) {
+      const parsed = decodeBase(base)
+      if (!parsed) return null
+      decoded.base = parsed
+    }
+    return decoded
   } catch {
     return null
   }
