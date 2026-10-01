@@ -4,9 +4,9 @@ All notable changes to Scratch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] - 2026-10-01
+## [0.1.0] - 2026-10-01
 
-First complete release: a local-first, encrypted notes app that runs in the
+First release: a local-first, encrypted notes app that runs in the
 browser and installs as an app on desktop and phone.
 
 ### Added
