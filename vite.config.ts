@@ -1,12 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readHeaderBlock } from './config/headers.ts'
 
 // The generated worker only precaches the static build output (shell, scripts,
 // styles, bundled woff2 fonts, icons). It has no runtime caching and no fetch
 // handling of its own, so notes, backups, and any other request never enter a cache.
 export default defineConfig({
   base: './',
+  // The preview server answers with the same headers a static host applies from
+  // public/_headers, so the production-build browser tests run under the policy.
+  preview: { headers: readHeaderBlock('public/_headers', '/*') },
   plugins: [
     react(),
     VitePWA({

@@ -15,7 +15,7 @@ const PHONE = { width: 360, height: 740 }
 const FUNCTIONAL = [/scratch\.spec\.ts/, /transfers\.spec\.ts/, /reflow\.spec\.ts/]
 // Desktop-only specs: service worker control, update hosting and storage scans are
 // engine-level behavior that does not change with the viewport.
-const DESKTOP_ONLY = [/accessibility.spec.ts/, ...FUNCTIONAL, /offline\.spec\.ts/, /secrets\.spec\.ts/, /support\.spec\.ts/]
+const DESKTOP_ONLY = [/csp\.spec\.ts/, /accessibility\.spec\.ts/, ...FUNCTIONAL, /offline\.spec\.ts/, /secrets\.spec\.ts/, /support\.spec\.ts/]
 
 // A browser that is installed but cannot start on this machine (for example Firefox
 // failing with a side-by-side configuration error because a system runtime is

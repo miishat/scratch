@@ -128,7 +128,14 @@ export async function startUpdatableHost(origin: string) {
       if (request.url === '/sw.js') body = Buffer.concat([body, Buffer.from(`
 // version ${version}
 `)])
-      response.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/octet-stream', 'cache-control': 'no-store' })
+      // The policy and companion headers pass through, so offline and update runs happen
+      // under the same Content Security Policy the preview applies.
+      const passed: Record<string, string> = {}
+      for (const name of ['content-security-policy', 'x-content-type-options', 'referrer-policy']) {
+        const value = upstream.headers.get(name)
+        if (value) passed[name] = value
+      }
+      response.writeHead(upstream.status, { ...passed, 'content-type': upstream.headers.get('content-type') ?? 'application/octet-stream', 'cache-control': 'no-store' })
       response.end(body)
     })().catch(() => { response.writeHead(502); response.end() })
   })

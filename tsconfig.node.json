@@ -6,5 +6,5 @@
     "noUnusedLocals": true, "noUnusedParameters": true, "noFallthroughCasesInSwitch": true,
     "types": ["vitest/globals", "node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tests"]
+  "include": ["vite.config.ts", "config", "vitest.config.ts", "playwright.config.ts", "tests"]
 }
