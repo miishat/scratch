@@ -30,7 +30,8 @@ function publishSlots() {
   slotListeners.forEach((listener) => listener())
 }
 export function useTopDialogSlot(): HTMLElement | null {
-  return useSyncExternalStore(subscribeSlots, () => topSlot)
+  // A slot that has left the document is never offered, even if it was not removed.
+  return useSyncExternalStore(subscribeSlots, () => (topSlot?.isConnected ? topSlot : null))
 }
 
 export function Dialog({ title, children, onRequestClose, canClose, className, initialFocus }: DialogProps) {

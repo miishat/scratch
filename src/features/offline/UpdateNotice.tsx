@@ -130,6 +130,21 @@ export function UpdateNotice({ store = offlineStore }: { store?: OfflineStore })
     if (document.activeElement === button) focusPending.current = false
   }, [failure, slot])
 
+  // Dismissing a banner control removes the focused element; inside a dialog focus
+  // goes to the dialog's own first control instead of falling to the page.
+  const refocus = useRef(false)
+  function leaveBanner() {
+    if (slot) refocus.current = true
+  }
+  useEffect(() => {
+    if (!refocus.current || !slot) return
+    refocus.current = false
+    const dialog = slot.closest<HTMLElement>('[role="dialog"]')
+    const target = dialog?.querySelector<HTMLElement>('[data-autofocus]')
+      ?? Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href]') ?? []).find((element) => !slot.contains(element))
+    ;(target ?? dialog)?.focus()
+  }, [offline.updateReady, failure, slot])
+
   const unavailable = (offline.support === 'unsupported' || offline.support === 'failed') && !unavailableDismissed
   const quiet = !offline.updateReady && !failure && !asking
   const showReady = quiet && offline.offlineReady
@@ -144,25 +159,34 @@ export function UpdateNotice({ store = offlineStore }: { store?: OfflineStore })
   }, [showUnavailable])
 
   const banner = <>
-    {offline.updateReady && !asking && <div className="update-notice" role="status">
+    {offline.updateReady && !asking && <div className="update-notice">
       <p>A new version of Scratch is ready.</p>
       <div className="dialog-actions">
         <button className="primary-button" type="button" onClick={updateNow}>Update now</button>
-        <button type="button" onClick={store.dismissUpdate}>Later</button>
+        <button type="button" onClick={() => { leaveBanner(); store.dismissUpdate() }}>Later</button>
       </div>
     </div>}
     {failure && <div className="update-notice" role="alert">
       <p>{failure.message}</p>
-      <div className="dialog-actions"><button ref={dismissFailure} type="button" onClick={() => setFailure(null)}>Dismiss</button></div>
+      <div className="dialog-actions"><button ref={dismissFailure} type="button" onClick={() => { leaveBanner(); setFailure(null) }}>Dismiss</button></div>
     </div>}
   </>
   // Pure status text floats over the page without taking space or taps; inside a
   // dialog it sits in the dialog's slot instead.
   const status = showReady ? 'Scratch is ready to work offline.' : showUnavailable ? 'Offline use is not available here. Your notes are still saved on this device.' : null
-  const statusNode = status && <p className={slot ? 'update-status' : 'update-status update-status-floating'} role="status">{status}</p>
+  // The text is spoken by the live region below, so the visible copy is hidden from
+  // assistive technology to avoid a second reading.
+  const statusNode = status && <p className={slot ? 'update-status' : 'update-status update-status-floating'} aria-hidden="true">{status}</p>
+  const announcement = status ?? (offline.updateReady && !asking ? 'A new version of Scratch is ready.' : '')
+  // Live regions only speak changes to a region that already exists, so one stays
+  // mounted: on the page, and inside the topmost dialog (which hides the page from
+  // assistive technology). Only the one where the person is looking holds the text.
+  const liveProps = { className: 'visually-hidden', 'aria-live': 'polite' as const, 'data-update-live': '' }
   const hasBanner = (offline.updateReady && !asking) || failure !== null
 
   return <>
+    <div {...liveProps}>{slot ? '' : announcement}</div>
+    {slot && createPortal(<div {...liveProps}>{announcement}</div>, slot)}
     {statusNode && (slot ? createPortal(statusNode, slot) : statusNode)}
     {hasBanner && (slot ? createPortal(banner, slot) : <div className="update-flow">{banner}</div>)}
     {/* Mounted on the body so it stacks above an open editor dialog. */}

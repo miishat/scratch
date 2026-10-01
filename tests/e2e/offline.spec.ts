@@ -142,7 +142,7 @@ async function stageUpdate(host: { bump: () => void }, page: Page) {
     const registration = await navigator.serviceWorker.getRegistration()
     await registration?.update()
   })
-  await expect(page.getByText('A new version of Scratch is ready.')).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('button', { name: 'Update now' })).toBeVisible({ timeout: 30000 })
 }
 
 const hasWaiting = (page: Page) => page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.waiting != null)
