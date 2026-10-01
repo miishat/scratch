@@ -45,11 +45,19 @@ export interface LibraryProviderProps {
   children: ReactNode
 }
 
-export function LibraryProvider({ session, children }: LibraryProviderProps): ReactNode {
+// The same key in the same library. A rewrapped header (a passphrase change) gives a
+// new session object but not a new library, so decrypted state and held refreshes
+// carry on.
+function sameLibrarySession(a: VaultSession | null, b: VaultSession | null): boolean {
+  return a !== null && b !== null && a.dataKey === b.dataKey && a.generation === b.generation && a.header.vaultId === b.header.vaultId
+}
+
+export function LibraryProvider({ session: incoming, children }: LibraryProviderProps): ReactNode {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [status, setStatus] = useState<LibraryStatus>('locked')
   const [error, setError] = useState<string | null>(null)
   const [activeSession, setActiveSession] = useState<VaultSession | null>(null)
+  const session = sameLibrarySession(activeSession, incoming) ? activeSession : incoming
   const [remoteChangePending, setRemoteChangePending] = useState(false)
   const holds = useRef(0)
   const pendingRefresh = useRef(false)

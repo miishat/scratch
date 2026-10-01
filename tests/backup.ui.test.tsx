@@ -428,6 +428,11 @@ describe('stale tab recovery export', () => {
       delete (document as unknown as Record<string, unknown>).hidden
       delete (document as unknown as Record<string, unknown>).visibilityState
     }
+    // The hidden deadline passed while the panel was up, so it asks for the passphrase.
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Passphrase'), PHRASE)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toBeEnabled(), { timeout: 30000 })
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     const body = screen.getByRole('textbox', { name: 'Note body' })
     expect(body).toBeVisible()

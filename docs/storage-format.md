@@ -182,10 +182,22 @@ concealed as soon as the tab is hidden, and a tab that resumes past either
 deadline locks before showing content. An unsaved note draft is sealed into a
 draft-purpose envelope held in memory only, and is offered back only after
 unlocking the same vault and generation. If sealing fails, the tab stays
-concealed and offers Save or Discard instead of reporting Locked. When another
-tab replaces the vault or its header, a tab without a dirty draft releases its
-session; a tab with a dirty draft keeps it concealed until the user exports a
-backup or discards the draft.
+concealed and offers Save or Discard instead of reporting Locked.
+
+When another tab changes the stored vault, a tab without a dirty draft releases
+its session. A tab with a dirty draft behaves by what changed. A header-only
+change (same vault id and generation, for example a passphrase change) keeps the
+session, because the data key is unchanged: the tab adopts the new header and
+the draft carries on. A replacement (different vault id or generation) conceals
+the library and shows a recovery panel with Export backup, Keep editing, and
+Discard draft and reload. The old library then exists only in that tab's memory,
+so the tab cannot lock the usual way. The inactivity and hidden deadlines still
+run: once one passes, Export backup and Keep editing stay disabled until the
+passphrase for that library is entered again (checked against the tab's
+in-memory header; nothing is written). Discard never needs it. The same applies
+if a deadline passes after Keep editing: the panel returns locked and the draft
+is never dropped. Saving after Keep editing still meets the replaced-library
+refusal.
 
 ## Offline cache
 

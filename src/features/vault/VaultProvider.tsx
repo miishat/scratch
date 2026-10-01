@@ -53,6 +53,12 @@ export interface VaultContextValue {
   hasDirtyDraft: boolean
   // Set when another tab replaced the vault or its header while a draft is dirty.
   remoteReplacement: boolean
+  // The other-tab recovery panel stayed up past the inactivity or hidden deadline.
+  // Exporting or continuing to edit then needs the passphrase for this library again.
+  remoteLocked: boolean
+  // Checks a passphrase against this tab's own in-memory header and, when it is
+  // right, lets the recovery panel be used again. Never touches stored data.
+  unlockRemote: (passphrase: string) => Promise<ActionResult>
   lockPrompt: LockPromptState | null
   lockErrorMessage: string | null
   create: (passphrase: string) => Promise<ActionResult>
@@ -77,7 +83,8 @@ export interface VaultContextValue {
   cancelLock: () => void
   discardDraftAndReload: () => void
   // Lifts the other-tab recovery panel so the editor is reachable again. The draft
-  // is kept; saving it meets the usual replaced-library handling.
+  // is kept; saving it meets the usual replaced-library handling. Refused while the
+  // panel is locked by a passed deadline.
   keepEditing: () => void
 }
 
@@ -98,6 +105,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const [recoveredDraft, setRecoveredDraft] = useState<DraftContent | null>(null)
   const [hasDirtyDraft, setHasDirtyDraft] = useState(false)
   const [remoteReplacement, setRemoteReplacement] = useState(false)
+  const [remoteLocked, setRemoteLockedState] = useState(false)
   const [lockPrompt, setLockPrompt] = useState<LockPromptState | null>(null)
   const [lockErrorMessage, setLockErrorMessage] = useState<string | null>(null)
   const [lockNotice, setLockNotice] = useState<string | null>(null)
@@ -111,12 +119,19 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const locking = useRef(false)
   // Mirrors remoteReplacement so timers can see it without resubscribing.
   const remoteRef = useRef(false)
+  // Mirrors remoteLocked for the same reason.
+  const remoteLockedRef = useRef(false)
   // Set once the person chose Keep editing after another tab replaced the vault:
   // this tab's session is stale, so a lock may never seal the draft for later.
   const staleRef = useRef(false)
   // Bumped whenever the session ends or an unlock begins, so a slow unlock or
   // header check can never act after the situation it started in has changed.
   const epoch = useRef(0)
+
+  const setRemoteLocked = useCallback((next: boolean): void => {
+    remoteLockedRef.current = next
+    setRemoteLockedState(next)
+  }, [])
 
   const setState = useCallback((next: VaultState): void => {
     stateRef.current = next
@@ -156,6 +171,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       setLockNotice(null)
       remoteRef.current = false
       staleRef.current = false
+      remoteLockedRef.current = false
+      setRemoteLockedState(false)
       setRemoteReplacement(false)
       setRecoveredDraft(null)
       setError(null)
@@ -168,6 +185,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const startSession = useCallback(
     (next: VaultSession, recovered: DraftContent | null): void => {
       staleRef.current = false
+      remoteLockedRef.current = false
+      setRemoteLockedState(false)
       sessionRef.current = next
       lastActivity.current = Date.now()
       setSession(next)
@@ -268,16 +287,20 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     const current = sessionRef.current
     if (!current || stateRef.current !== 'unlocked' || locking.current) return
     // While the other-tab recovery panel holds a draft, no timer may release the
-    // session: the draft would be sealed against a vault that no longer exists.
+    // session: the draft would be sealed against a vault that no longer exists, and
+    // the old library exists only in this tab's memory. The deadline still counts:
+    // the panel locks, and exporting or editing needs the passphrase again.
     if (remoteRef.current) {
-      if (document.visibilityState !== 'hidden') setConcealed(false)
+      setRemoteLocked(true)
       return
     }
     // After Keep editing the session describes a replaced library, so a sealed
-    // draft could never be offered back. Bring the recovery panel back instead.
+    // draft could never be offered back. Bring the recovery panel back instead,
+    // locked, so the editor is not re-exposed without the passphrase.
     if (staleRef.current && draftRef.current) {
       remoteRef.current = true
       setRemoteReplacement(true)
+      setRemoteLocked(true)
       return
     }
     locking.current = true
@@ -312,7 +335,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     } finally {
       locking.current = false
     }
-  }, [releaseSession, setState])
+  }, [releaseSession, setState, setRemoteLocked])
 
   // Timer and event call sites never leave a rejection unhandled.
   const lockQuietly = useCallback((): void => {
@@ -384,8 +407,24 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     releaseSession(CHANGED_ELSEWHERE)
   }, [releaseSession])
 
+  const unlockRemote = useCallback(async (passphrase: string): Promise<ActionResult> => {
+    const active = sessionRef.current
+    if (!active || !remoteRef.current) return { ok: false }
+    try {
+      // Checked against this tab's own header. The session this returns is dropped.
+      const result = await unlockVault(active.header, passphrase, active.generation)
+      if (sessionRef.current !== active) return { ok: false }
+      if (!result.ok) return { ok: false, message: 'The passphrase is incorrect.' }
+    } catch {
+      return { ok: false, message: 'Could not check the passphrase. Try again.' }
+    }
+    lastActivity.current = Date.now()
+    setRemoteLocked(false)
+    return { ok: true }
+  }, [setRemoteLocked])
+
   const keepEditing = useCallback((): void => {
-    if (!draftRef.current) return
+    if (!draftRef.current || remoteLockedRef.current) return
     staleRef.current = true
     remoteRef.current = false
     // A hide that outlasted the lock deadline left the content concealed while the
@@ -508,7 +547,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('focus', onFocus)
     }
-  }, [state, lockQuietly])
+  }, [state, lockQuietly, remoteLocked])
 
   // Another tab replaced the vault, or changed its header (passphrase change).
   // Item-only changes leave the header intact and are handled by the library.
@@ -523,6 +562,16 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       void readHeader().then((stored) => {
         if (mine !== latest || sessionRef.current !== active || !stored.ok) return
         if (stored.library === 'present' && sameVault(active, stored.header)) return
+        if (draftRef.current && stored.library === 'present' && stored.header.header.vaultId === active.header.vaultId && stored.header.meta.generation === active.generation) {
+          // Only the passphrase wrapping changed (a rewrap in another tab). The data
+          // key is the same, so a tab holding a draft carries on with the new header
+          // instead of showing the replacement panel. A tab without a draft still
+          // releases its session below, so a passphrase change locks idle tabs.
+          const adopted: VaultSession = { ...active, header: stored.header.header }
+          sessionRef.current = adopted
+          setSession(adopted)
+          return
+        }
         if (draftRef.current) {
           remoteRef.current = true
           setRemoteReplacement(true)
@@ -547,6 +596,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       clearRecoveredDraft,
       hasDirtyDraft,
       remoteReplacement,
+      remoteLocked,
+      unlockRemote,
       lockPrompt,
       lockErrorMessage,
       create,
@@ -568,7 +619,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     }),
     [
       state, session, concealed, error, notice, recoveredDraft, clearRecoveredDraft, hasDirtyDraft,
-      remoteReplacement, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
+      remoteReplacement, remoteLocked, unlockRemote, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
       changePassphrase, installSession, registerDraft, readDraft, saveDraft, discardDraft, cancelDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
       keepEditing,
     ],

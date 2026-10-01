@@ -71,6 +71,9 @@ export function Dialog({ title, children, onRequestClose, canClose, className, i
   useEffect(() => {
     function guard(event: FocusEvent) {
       const target = event.target as HTMLElement
+      // A concealed dialog (inside a hidden or inert wrapper) must not pull focus
+      // away from the unlock or recovery controls shown in its place.
+      if (ref.current?.closest('[inert], [hidden]')) return
       if (ref.current && openDialogs[openDialogs.length - 1] === ref.current && !ref.current.contains(target)) {
         const first = ref.current.querySelector<HTMLElement>(focusable)
         ;(first ?? ref.current)?.focus()

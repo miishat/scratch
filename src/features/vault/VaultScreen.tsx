@@ -120,7 +120,9 @@ export function LockErrorPanel() {
 }
 
 // Shown when another tab replaced the vault or its header while this tab holds a
-// dirty draft. The draft is never dropped silently: export it or discard it.
+// dirty draft. The draft is never dropped silently: export it or discard it. Once
+// the inactivity or hidden deadline passes while it is up, export and Keep editing
+// wait for the passphrase again; discarding never needs it.
 export function RemoteChangePanel({
   snapshot,
   session,
@@ -130,9 +132,23 @@ export function RemoteChangePanel({
   session: VaultSession | null
   exportRecoveryBackup?: ExportRecoveryBackup
 }) {
-  const { readDraft, discardDraftAndReload, keepEditing } = useVault()
+  const { readDraft, discardDraftAndReload, keepEditing, remoteLocked, unlockRemote } = useVault()
+  const phraseId = useId()
+  const [phrase, setPhrase] = useState('')
+  const [phraseError, setPhraseError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  async function continueWithPassphrase(event: FormEvent) {
+    event.preventDefault()
+    const attempt = phrase
+    setPhrase('')
+    setBusy(true)
+    setPhraseError(null)
+    const result = await unlockRemote(attempt)
+    if (!result.ok) setPhraseError(result.message ?? 'The passphrase is incorrect.')
+    setBusy(false)
+  }
 
   async function exportBackup() {
     const draft = readDraft()
@@ -153,9 +169,16 @@ export function RemoteChangePanel({
     <h1>This library changed in another tab</h1>
     <p>Your unsaved note has not been saved. Export a backup that includes it, keep editing it, or discard the note and unlock again.</p>
     {status && <p role="status">{status}</p>}
+    {remoteLocked && <form className="vault-form" onSubmit={(event) => void continueWithPassphrase(event)}>
+      <p>Scratch paused this tab while you were away. Enter the passphrase you unlocked it with to export a backup or keep editing.</p>
+      <label htmlFor={phraseId}>Passphrase</label>
+      <input id={phraseId} type="password" autoComplete="current-password" autoFocus value={phrase} disabled={busy} onChange={(event) => setPhrase(event.target.value)} />
+      {phraseError && <p role="alert" className="form-error">{phraseError}</p>}
+      <div className="dialog-actions"><button type="submit" disabled={busy || phrase === ''}>Continue</button></div>
+    </form>}
     <div className="dialog-actions">
-      {exportRecoveryBackup && <button className="primary-button" type="button" disabled={busy} onClick={() => void exportBackup()}>Export backup</button>}
-      <button type="button" disabled={busy} onClick={keepEditing}>Keep editing</button>
+      {exportRecoveryBackup && <button className="primary-button" type="button" disabled={busy || remoteLocked} onClick={() => void exportBackup()}>Export backup</button>}
+      <button type="button" disabled={busy || remoteLocked} onClick={keepEditing}>Keep editing</button>
       <button type="button" disabled={busy} onClick={discardDraftAndReload}>Discard draft and reload</button>
     </div>
   </main>

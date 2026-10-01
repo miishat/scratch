@@ -14,6 +14,7 @@ import {
   initializeLibrary,
   readHeader,
   readStoredSnapshot,
+  replaceLibrary,
   resetRepositoryForTests,
 } from '../src/features/library/repository'
 import { closeDatabase, deleteDatabase, useDatabaseName } from '../src/features/library/database'
@@ -223,6 +224,18 @@ async function openLockFromSettings(user: ReturnType<typeof typing>): Promise<vo
 
 async function typeDraft(user: ReturnType<typeof typing>): Promise<void> {
   await user.type(screen.getByLabelText('Draft'), DRAFT_TEXT)
+}
+
+// Another tab replaced the whole library: same key, new generation.
+async function replaceLibraryElsewhere(): Promise<void> {
+  const init = await readHeader()
+  if (!init.ok || init.library !== 'present') throw new Error('expected a library')
+  const session = { header: init.header.header, generation: init.header.meta.generation, dataKey: vault.dataKey }
+  const result = await replaceLibrary(session, { expectedGeneration: session.generation, expectedRevision: init.header.meta.revision }, [])
+  if (!result.ok) throw new Error(result.message)
+  const channel = new BroadcastChannel('scratch-v1-changes')
+  channel.postMessage({ vaultId: session.header.vaultId, generation: result.snapshot.meta.generation, revision: result.snapshot.meta.revision })
+  channel.close()
 }
 
 function expectUnlockScreen(): void {
@@ -512,7 +525,7 @@ describe('changes from another tab', () => {
   )
 
   it(
-    'conceals the library and offers recovery when a dirty draft exists',
+    'keeps the session and the draft when only the passphrase header changed elsewhere',
     async () => {
       await seedLibrary()
       const user = typing()
@@ -520,6 +533,31 @@ describe('changes from another tab', () => {
       await unlockAndWaitForLibrary(user)
       await typeDraft(user)
       await replaceHeaderElsewhere()
+      await act(async () => {
+        await new Promise<void>((resolve) => realSetTimeout(resolve, 300))
+      })
+      expect(screen.queryByRole('heading', { name: 'This library changed in another tab' })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Draft')).toBeVisible()
+      expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT)
+      expect(spies.discard).not.toHaveBeenCalled()
+      // The normal lock path still applies: the draft is sealed and comes back.
+      advance(10 * MINUTE + 1000)
+      await until(() => expectUnlockScreen())
+      await unlockThroughUi(user, NEW_PASSPHRASE)
+      await until(() => expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT))
+    },
+    60000,
+  )
+
+  it(
+    'conceals the library and offers recovery when a dirty draft exists',
+    async () => {
+      await seedLibrary()
+      const user = typing()
+      renderApp(true)
+      await unlockAndWaitForLibrary(user)
+      await typeDraft(user)
+      await replaceLibraryElsewhere()
 
       await until(() =>
         expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument(),
@@ -549,19 +587,7 @@ describe('session hardening', () => {
     renderApp(true)
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
-    const header = await readHeader()
-    if (!header.ok || header.library !== 'present') throw new Error('expected a library')
-    const session = { header: header.header.header, generation: header.header.meta.generation, dataKey: vault.dataKey }
-    const next = await actualRewrap(session, PASSPHRASE, NEW_PASSPHRASE)
-    const result = await changePassphrase(
-      session,
-      { generation: session.generation, expectedRevision: header.header.meta.revision },
-      next,
-    )
-    if (!result.ok) throw new Error(result.message)
-    const channel = new BroadcastChannel('scratch-v1-changes')
-    channel.postMessage({ vaultId: next.vaultId, generation: session.generation, revision: result.snapshot.meta.revision })
-    channel.close()
+    await replaceLibraryElsewhere()
     await until(() =>
       expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument(),
     )
@@ -582,12 +608,53 @@ describe('session hardening', () => {
     expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
     expect(spies.discard).not.toHaveBeenCalled()
 
+    // The deadline passed while the panel was up: nothing is reachable until the
+    // passphrase for this library is entered again.
+    expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Passphrase'), 'not the passphrase at all')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await until(() => expect(screen.getByRole('alert')).toHaveTextContent('incorrect'))
+    expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled()
+    expect(spies.exportRecovery).not.toHaveBeenCalled()
+    await user.clear(screen.getByLabelText('Passphrase'))
+    await user.type(screen.getByLabelText('Passphrase'), PASSPHRASE)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await until(() => expect(screen.getByRole('button', { name: 'Export backup' })).toBeEnabled())
+
     await user.click(screen.getByRole('button', { name: 'Export backup' }))
     await until(() => expect(screen.getByText('Backup exported.')).toBeInTheDocument())
     expect(spies.exportRecovery.mock.calls[0][0].draft.input.body).toBe(DRAFT_TEXT)
     await user.click(screen.getByRole('button', { name: 'Discard draft and reload' }))
     await until(() => expectUnlockScreen())
     expect(spies.discard).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the draft be discarded without a passphrase after the deadline', async () => {
+    const user = typing()
+    await openRemoteRecovery(user)
+    advance(11 * MINUTE)
+    await until(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Discard draft and reload' }))
+    await until(() => expectUnlockScreen())
+    expect(spies.discard).toHaveBeenCalledTimes(1)
+  })
+
+  it('requires the passphrase again when the deadline passes after Keep editing', async () => {
+    const user = typing()
+    await openRemoteRecovery(user)
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText('Draft')).toBeVisible()
+    expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT)
+    advance(11 * MINUTE)
+    await until(() => expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Passphrase'), PASSPHRASE)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await until(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT)
   })
 
   it('treats a failing draft read during automatic lock like a seal failure', async () => {
