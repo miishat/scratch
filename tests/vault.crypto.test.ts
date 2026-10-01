@@ -59,6 +59,32 @@ describe('vault crypto', () => {
     expect('session' in result).toBe(false)
   })
 
+  // A header whose wrapped key has the right passphrase and AAD but the wrong length.
+  // The pre-check on the ciphertext length already refuses short keys; this pins that
+  // no weaker AES key (16 or 24 bytes) or odd length can ever be installed.
+  async function headerWrapping(keyLength: number): Promise<VaultHeader> {
+    const salt = crypto.getRandomValues(new Uint8Array(16))
+    const saltBase64 = btoa(String.fromCharCode(...salt))
+    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(PASSPHRASE), 'PBKDF2', false, ['deriveKey'])
+    const wrappingKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])
+    const vaultId = crypto.randomUUID()
+    const nonce = crypto.getRandomValues(new Uint8Array(12))
+    const aad = new TextEncoder().encode(JSON.stringify(['scratch-wrap', 1, vaultId, saltBase64, 600000]))
+    const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, additionalData: aad, tagLength: 128 }, wrappingKey, crypto.getRandomValues(new Uint8Array(keyLength))))
+    const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
+    return { formatVersion: 1, vaultId, salt: saltBase64, iterations: 600000, wrappedDataKey: { nonce: encode(nonce), ciphertext: encode(sealed) } }
+  }
+
+  it('never installs a data key that is not exactly 32 bytes', async () => {
+    for (const length of [16, 24, 40]) {
+      const result = await unlockVault(await headerWrapping(length), PASSPHRASE, 1)
+      expect(result.ok, `${length} byte key`).toBe(false)
+      expect('session' in result).toBe(false)
+    }
+    const good = await unlockVault(await headerWrapping(32), PASSPHRASE, 1)
+    expect(good.ok).toBe(true)
+  })
+
   it('fails authentication when a ciphertext bit is flipped', async () => {
     const session = sessionFrom(vault)
     const item = makeNote({ title: 'T', body: 'tamper me', isSecret: false })

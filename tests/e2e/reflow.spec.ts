@@ -139,3 +139,26 @@ test('primary controls are at least 44 px tall and wide at this project width', 
   await measure('close dialog', page.getByRole('button', { name: 'Close dialog' }))
   expect(small, 'targets below 44 px').toEqual([])
 })
+
+test('the first-visit offline notice never covers a visible control', async ({ page }) => {
+  await createLibrary(page)
+  const notice = page.locator('.update-status')
+  await expect(notice).toBeVisible({ timeout: 15000 })
+  const overlaps = await page.evaluate(() => {
+    const status = document.querySelector('.update-status')!.getBoundingClientRect()
+    return [...document.querySelectorAll<HTMLElement>('button, a[href], input, textarea')]
+      .filter((element) => {
+        const box = element.getBoundingClientRect()
+        return box.width > 1 && box.height > 1 && getComputedStyle(element).visibility !== 'hidden'
+      })
+      .filter((element) => {
+        const box = element.getBoundingClientRect()
+        return box.left < status.right && box.right > status.left && box.top < status.bottom && box.bottom > status.top
+      })
+      .map((element) => `${element.tagName.toLowerCase()} ${(element.getAttribute('aria-label') ?? element.textContent ?? '').slice(0, 30)}`)
+  })
+  expect(overlaps, 'controls under the offline notice').toEqual([])
+  const add = await page.getByRole('button', { name: 'Add', exact: true }).boundingBox()
+  const box = await notice.boundingBox()
+  expect(add && box && !(add.x < box.x + box.width && add.x + add.width > box.x && add.y < box.y + box.height && add.y + add.height > box.y), 'Add stays clear of the notice').toBe(true)
+})

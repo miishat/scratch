@@ -45,7 +45,7 @@ describe('Content Security Policy in public/_headers', () => {
     expect(headers['X-Content-Type-Options']).toBe('nosniff')
     expect(headers['Referrer-Policy']).toBe('no-referrer')
     const file = readFileSync(root('public/_headers'), 'utf8')
-    for (const path of ['/index.html', '/sw.js', '/theme-init.js']) expect(readHeaderBlock(root('public/_headers'), path)['Cache-Control'], path).toBe('no-cache')
+    for (const path of ['/', '/index.html', '/sw.js', '/theme-init.js']) expect(readHeaderBlock(root('public/_headers'), path)['Cache-Control'], path).toBe('no-cache')
     expect(file).toMatch(/\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/)
   })
 

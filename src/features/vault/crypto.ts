@@ -208,6 +208,9 @@ export async function unlockVault(
   try {
     const wrappingKey = await deriveWrappingKey(passphrase, salt, PBKDF2_ITERATIONS)
     dataKeyBytes = await unwrapDataKeyBytes(header, wrappingKey)
+    // AES-GCM import also accepts 16 and 24 byte keys. Only a 256-bit key is ever
+    // written, so anything else is a crafted or corrupt header and never installed.
+    if (dataKeyBytes.length !== DATA_KEY_BYTES) throw new Error('Unexpected data key length.')
     const dataKey = await importDataKey(dataKeyBytes)
     return { ok: true, session: { header, generation, dataKey } }
   } catch {

@@ -19,6 +19,9 @@
   Referrer-Policy: no-referrer
 
 # The shell and worker must be revalidated so a new release is noticed promptly.
+# A request for the site root (/) does not match /index.html, so it has its own rule.
+/
+  Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
 /sw.js

@@ -166,6 +166,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .update-notice p { margin: 0; }
 .update-notice .dialog-actions { margin-top: 8px; }
 .update-status { margin: 0 0 12px; padding: 8px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
-.update-status-floating { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); margin: 0; z-index: 20; pointer-events: none; }
+/* Bottom of the page, above the toast, so it never covers the header controls on a phone. */
+.update-status-floating { position: fixed; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 64px); left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); margin: 0; z-index: 20; pointer-events: none; }
 .dialog-notice-slot { flex: 0 0 auto; }
 .dialog-notice-slot:empty { display: none; }

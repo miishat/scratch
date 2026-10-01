@@ -10,6 +10,7 @@ import { addNote, createLibrary, exportBackup, PASSPHRASE, recordRequests, SYNTH
 
 const TITLE = 'OpenAI production key'
 const ORDINARY = 'ordinary note marker 7731'
+// btoa(SYNTHETIC_TOKEN) assertions were removed: base64 of a substring depends on byte alignment, so they were near-vacuous, and the raw-byte scanner already covers the ciphertext.
 const SENSITIVE = [SYNTHETIC_TOKEN, TITLE, ORDINARY, PASSPHRASE]
 
 // Every string the page exposes: text, accessibility snapshot, attribute values, title.
