@@ -1,6 +1,5 @@
-import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { startUpdatableHost } from './helpers'
 
 // Offline behavior of the production preview build. Each case uses its own browser
 // context, so service worker registrations and IndexedDB never leak between cases.
@@ -45,12 +44,23 @@ async function warm(context: BrowserContext, entry = '/') {
   return page
 }
 
-test('warm offline: the shell opens, unlocks, and keeps saved notes', async ({ context }) => {
-  const first = await warm(context)
+// Warms the library on a host this spec controls, then stops that host, so offline is
+// real: nothing answers at all. Playwright's context.setOffline is not used because in
+// WebKit it makes every navigation fail with an internal error, even for a page the
+// service worker controls, which says nothing about the app.
+async function reopenOffline(context: BrowserContext, baseURL: string, watch?: (page: Page) => void): Promise<Page> {
+  const host = await startUpdatableHost(baseURL)
+  const first = await warm(context, host.url)
   await first.close()
-  await context.setOffline(true)
+  await host.close()
   const page = await context.newPage()
-  await page.goto('/')
+  watch?.(page)
+  await page.goto(host.url)
+  return page
+}
+
+test('warm offline: the shell opens, unlocks, and keeps saved notes', async ({ context, baseURL }) => {
+  const page = await reopenOffline(context, baseURL!)
   await expect(page.getByRole('heading', { name: 'Unlock Scratch' })).toBeVisible()
   await unlock(page)
   await expect(page.getByText(NOTE_TITLE)).toBeVisible()
@@ -58,14 +68,9 @@ test('warm offline: the shell opens, unlocks, and keeps saved notes', async ({ c
   await expect(page.getByText(NOTE_BODY)).toBeVisible()
 })
 
-test('offline write: a note saved offline survives a reload with no failed requests', async ({ context }) => {
-  const first = await warm(context)
-  await first.close()
-  await context.setOffline(true)
-  const page = await context.newPage()
+test('offline write: a note saved offline survives a reload with no failed requests', async ({ context, baseURL }) => {
   const failures: string[] = []
-  page.on('requestfailed', (request) => failures.push(request.url()))
-  await page.goto('/')
+  const page = await reopenOffline(context, baseURL!, (opened) => opened.on('requestfailed', (request) => failures.push(request.url())))
   await unlock(page)
   await expect(page.getByText(NOTE_TITLE)).toBeVisible()
   await addNoteFromHeader(page)
@@ -77,12 +82,8 @@ test('offline write: a note saved offline survives a reload with no failed reque
   expect(failures).toEqual([])
 })
 
-test('search, export, and import work offline', async ({ context }, testInfo) => {
-  const first = await warm(context)
-  await first.close()
-  await context.setOffline(true)
-  const page = await context.newPage()
-  await page.goto('/')
+test('search, export, and import work offline', async ({ context, baseURL }, testInfo) => {
+  const page = await reopenOffline(context, baseURL!)
   await unlock(page)
   await page.getByRole('searchbox', { name: 'Search' }).fill('Offline warm')
   await expect(page.getByText(NOTE_TITLE)).toBeVisible()
@@ -114,27 +115,6 @@ test('unseen install: a fresh browser that starts offline cannot load the app', 
     await context.close()
   }
 })
-
-// A pass-through server in front of the preview build. Bumping the version appends
-// a comment to the worker script, which is what a new deployment looks like to the
-// browser: a different script that installs and then waits for approval.
-async function startUpdatableHost(origin: string) {
-  let version = 1
-  const server: Server = createServer((request, response) => {
-    void (async () => {
-      const upstream = await fetch(new URL(request.url ?? '/', origin))
-      let body = Buffer.from(await upstream.arrayBuffer())
-      if (request.url === '/sw.js') body = Buffer.concat([body, Buffer.from(`
-// version ${version}
-`)])
-      response.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/octet-stream', 'cache-control': 'no-store' })
-      response.end(body)
-    })().catch(() => { response.writeHead(502); response.end() })
-  })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const url = `http://localhost:${(server.address() as AddressInfo).port}/`
-  return { url, bump: () => { version += 1 }, close: () => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections() }) }
-}
 
 async function stageUpdate(host: { bump: () => void }, page: Page) {
   host.bump()
