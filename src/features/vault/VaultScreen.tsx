@@ -32,13 +32,17 @@ function SetupScreen({ onImportBackup }: { onImportBackup?: () => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (phrase !== confirm) {
+    const attempt = phrase
+    const matches = phrase === confirm
+    setPhrase('')
+    setConfirm('')
+    if (!matches) {
       setError('Passphrases do not match.')
       return
     }
     setError(null)
     setBusy(true)
-    const result = await create(phrase)
+    const result = await create(attempt)
     if (!result.ok) {
       setError(result.message ?? 'Could not create the vault.')
       setBusy(false)
@@ -95,12 +99,18 @@ function UnlockScreen() {
 // concealed, and the user chooses explicitly what happens to the draft.
 export function LockErrorPanel() {
   const { lockErrorMessage, saveAndLock, discardAndLock } = useVault()
+  const [busy, setBusy] = useState(false)
+  async function save() {
+    setBusy(true)
+    await saveAndLock()
+    setBusy(false)
+  }
   return <main className="support-screen vault-screen">
     <h1>Could not lock Scratch</h1>
     <p role="alert">{lockErrorMessage}</p>
     <div className="dialog-actions">
-      <button className="primary-button" type="button" onClick={() => void saveAndLock()}>Save draft and lock</button>
-      <button type="button" onClick={discardAndLock}>Discard draft and lock</button>
+      <button className="primary-button" type="button" disabled={busy} onClick={() => void save()}>Save draft and lock</button>
+      <button type="button" disabled={busy} onClick={discardAndLock}>Discard draft and lock</button>
     </div>
   </main>
 }

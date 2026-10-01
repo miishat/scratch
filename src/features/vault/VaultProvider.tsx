@@ -96,6 +96,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const lastActivity = useRef(0)
   const hiddenAt = useRef<number | null>(null)
   const locking = useRef(false)
+  // Mirrors remoteReplacement so timers can see it without resubscribing.
+  const remoteRef = useRef(false)
   // Bumped whenever the session ends or an unlock begins, so a slow unlock or
   // header check can never act after the situation it started in has changed.
   const epoch = useRef(0)
@@ -136,6 +138,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       setLockPrompt(null)
       setLockErrorMessage(null)
       setLockNotice(null)
+      remoteRef.current = false
       setRemoteReplacement(false)
       setRecoveredDraft(null)
       setError(null)
@@ -197,30 +200,35 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
         }
         return { ok: false, message }
       }
-      // The header is read fresh so a passphrase changed in another tab applies.
-      const stored = await readHeader()
-      if (epoch.current !== mine) return { ok: false }
-      if (!stored.ok) return fail(stored.message)
-      if (stored.library === 'absent') {
-        setState('setup')
-        return { ok: false }
-      }
-      const result = await unlockVault(stored.header.header, passphrase, stored.header.meta.generation)
-      if (epoch.current !== mine) return { ok: false }
-      if (!result.ok) return fail(result.message)
-
-      let recovered: DraftContent | null = null
-      const sealed = sealedRef.current
-      if (sealed) {
-        if (sealed.vaultId === result.session.header.vaultId && sealed.generation === result.session.generation) {
-          const opened = await openEnvelope(result.session, 'draft', sealed.envelope)
-          if (epoch.current !== mine) return { ok: false }
-          if (opened.ok) recovered = decodeDraft(opened.plaintext)
+      try {
+        // The header is read fresh so a passphrase changed in another tab applies.
+        const stored = await readHeader()
+        if (epoch.current !== mine) return { ok: false }
+        if (!stored.ok) return fail(stored.message)
+        if (stored.library === 'absent') {
+          setState('setup')
+          return { ok: false }
         }
-        sealedRef.current = null
+        const result = await unlockVault(stored.header.header, passphrase, stored.header.meta.generation)
+        if (epoch.current !== mine) return { ok: false }
+        if (!result.ok) return fail(result.message)
+
+        let recovered: DraftContent | null = null
+        const sealed = sealedRef.current
+        if (sealed) {
+          if (sealed.vaultId === result.session.header.vaultId && sealed.generation === result.session.generation) {
+            const opened = await openEnvelope(result.session, 'draft', sealed.envelope)
+            if (epoch.current !== mine) return { ok: false }
+            if (opened.ok) recovered = decodeDraft(opened.plaintext)
+          }
+          sealedRef.current = null
+        }
+        startSession(result.session, recovered)
+        return { ok: true }
+      } catch {
+        // Corrupt stored data must not leave the screen stuck on Unlocking.
+        return fail('Could not unlock this vault. Try again.')
       }
-      startSession(result.session, recovered)
-      return { ok: true }
     },
     [setState, startSession],
   )
@@ -241,6 +249,9 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const automaticLock = useCallback(async (): Promise<void> => {
     const current = sessionRef.current
     if (!current || stateRef.current !== 'unlocked' || locking.current) return
+    // While the other-tab recovery panel holds a draft, no timer may release the
+    // session: the draft would be sealed against a vault that no longer exists.
+    if (remoteRef.current) return
     locking.current = true
     // Conceal first: nothing decrypted may stay visible while sealing runs.
     setConcealed(true)
@@ -248,8 +259,9 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     try {
       const draft = draftRef.current
       if (draft) {
-        const bytes = encodeDraft(draft.read())
+        let bytes: Uint8Array | null = null
         try {
+          bytes = encodeDraft(draft.read())
           const envelope = await sealEnvelope(current, 'draft', bytes)
           sealedRef.current = {
             vaultId: current.header.vaultId,
@@ -258,13 +270,13 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
           }
         } catch {
           if (sessionRef.current !== current) return
-          // Sealing failed: the draft is still only in the editor. Do not report
-          // Locked; keep the editor concealed and offer explicit recovery.
+          // Reading or sealing failed: the draft is still only in the editor. Do
+          // not report Locked; keep the editor concealed and offer explicit recovery.
           setLockErrorMessage('Scratch could not protect your unsaved note, so it is not locked.')
           setState('lock-error')
           return
         } finally {
-          bytes.fill(0)
+          bytes?.fill(0)
         }
       }
       if (sessionRef.current !== current) return
@@ -273,6 +285,11 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       locking.current = false
     }
   }, [releaseSession, setState])
+
+  // Timer and event call sites never leave a rejection unhandled.
+  const lockQuietly = useCallback((): void => {
+    automaticLock().catch(() => setState('lock-error'))
+  }, [automaticLock, setState])
 
   const requestLock = useCallback((): void => {
     if (stateRef.current !== 'unlocked') return
@@ -339,8 +356,13 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     let header
     try {
       header = await rewrapVault(active, current, next)
-    } catch {
-      return { ok: false, message: 'The current passphrase is incorrect.' }
+    } catch (cause) {
+      // Only an authentication failure means the phrase was wrong.
+      const wrong = typeof cause === 'object' && cause !== null && (cause as { name?: string }).name === 'OperationError'
+      return {
+        ok: false,
+        message: wrong ? 'The current passphrase is incorrect.' : 'Could not change the passphrase. Try again.',
+      }
     }
     const stored = await readHeader()
     if (!stored.ok) return { ok: false, message: stored.message }
@@ -373,7 +395,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     }
     function checkInactivity(): void {
       if (inactivityElapsed(lastActivity.current, Date.now())) {
-        void automaticLock()
+        lockQuietly()
         return
       }
       schedule()
@@ -387,7 +409,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
         hiddenAt.current = now
         setConcealed(true)
         clearTimeout(hiddenTimer)
-        hiddenTimer = setTimeout(() => void automaticLock(), HIDDEN_LOCK_MS)
+        hiddenTimer = setTimeout(() => lockQuietly(), HIDDEN_LOCK_MS)
         return
       }
       clearTimeout(hiddenTimer)
@@ -395,14 +417,14 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       hiddenAt.current = null
       if ((since !== null && hiddenElapsed(since, now)) || inactivityElapsed(lastActivity.current, now)) {
         // Stay concealed: the lock completes before any plaintext is shown again.
-        void automaticLock()
+        lockQuietly()
         return
       }
       setConcealed(false)
       schedule()
     }
     const onFocus = (): void => {
-      if (inactivityElapsed(lastActivity.current, Date.now())) void automaticLock()
+      if (inactivityElapsed(lastActivity.current, Date.now())) lockQuietly()
     }
 
     const activityEvents = ['keydown', 'pointerdown', 'pointermove', 'touchstart'] as const
@@ -417,7 +439,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('focus', onFocus)
     }
-  }, [state, automaticLock])
+  }, [state, lockQuietly])
 
   // Another tab replaced the vault, or changed its header (passphrase change).
   // Item-only changes leave the header intact and are handled by the library.
@@ -432,7 +454,10 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       void readHeader().then((stored) => {
         if (mine !== latest || sessionRef.current !== active || !stored.ok) return
         if (stored.library === 'present' && sameVault(active, stored.header)) return
-        if (draftRef.current) setRemoteReplacement(true)
+        if (draftRef.current) {
+          remoteRef.current = true
+          setRemoteReplacement(true)
+        }
         else releaseSession(CHANGED_ELSEWHERE)
       })
     })

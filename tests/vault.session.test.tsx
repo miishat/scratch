@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { App } from '../src/app/App'
 import { useVault } from '../src/features/vault/VaultProvider'
 import { useLibrary } from '../src/features/library/LibraryProvider'
-import { createVault, rewrapVault } from '../src/features/vault/crypto'
+import { createVault } from '../src/features/vault/crypto'
 import * as crypto_ from '../src/features/vault/crypto'
 import type { CipherEnvelope, CreatedVault } from '../src/features/vault/types'
 import type { MutationResult } from '../src/features/library/types'
@@ -24,11 +24,19 @@ import { closeDatabase, deleteDatabase, useDatabaseName } from '../src/features/
 
 vi.mock('../src/features/vault/crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/features/vault/crypto')>()
-  return { ...actual, sealEnvelope: vi.fn(actual.sealEnvelope) }
+  return {
+    ...actual,
+    sealEnvelope: vi.fn(actual.sealEnvelope),
+    unlockVault: vi.fn(actual.unlockVault),
+    rewrapVault: vi.fn(actual.rewrapVault),
+  }
 })
 
 // PBKDF2 at 600,000 iterations makes each unlock take real time.
 vi.setConfig({ testTimeout: 60000 })
+
+const actualRewrap = (...args: Parameters<typeof crypto_.rewrapVault>) =>
+  vi.importActual<typeof import('../src/features/vault/crypto')>('../src/features/vault/crypto').then((m) => m.rewrapVault(...args))
 
 const realSetTimeout = globalThis.setTimeout
 const realNow = Date.now.bind(Date)
@@ -40,6 +48,7 @@ const MINUTE = 60_000
 
 let vault: CreatedVault
 let dbName: string
+let readFails = false
 
 const renderLog: { concealed: boolean; titles: string[] }[] = []
 const spies = {
@@ -58,6 +67,7 @@ beforeEach(() => {
   useDatabaseName(dbName)
   resetRepositoryForTests()
   renderLog.length = 0
+  readFails = false
   spies.save.mockReset()
   spies.discard.mockReset()
   spies.cancel.mockReset()
@@ -79,6 +89,8 @@ afterEach(async () => {
   localStorage.clear()
   sessionStorage.clear()
   vi.mocked(crypto_.sealEnvelope).mockClear()
+  vi.mocked(crypto_.unlockVault).mockClear()
+  vi.mocked(crypto_.rewrapVault).mockClear()
 })
 
 async function until(check: () => void, limit = 30000): Promise<void> {
@@ -154,7 +166,10 @@ function FakeEditor() {
   useEffect(() => {
     if (!dirty) return
     return registerDraft({
-      read: () => ({ noteId: null, input: { parentId: null, title: null, body: textRef.current, isSecret: false } }),
+      read: () => {
+        if (readFails) throw new Error('read failed')
+        return { noteId: null, input: { parentId: null, title: null, body: textRef.current, isSecret: false } }
+      },
       save: () => spies.save(),
       discard: () => {
         spies.discard()
@@ -468,7 +483,7 @@ describe('changes from another tab', () => {
     const init = await readHeader()
     if (!init.ok || init.library !== 'present') throw new Error('expected a library')
     const session = { header: init.header.header, generation: init.header.meta.generation, dataKey: vault.dataKey }
-    const header = await rewrapVault(session, PASSPHRASE, NEW_PASSPHRASE)
+    const header = await actualRewrap(session, PASSPHRASE, NEW_PASSPHRASE)
     const result = await changePassphrase(
       session,
       { generation: session.generation, expectedRevision: init.header.meta.revision },
@@ -480,7 +495,7 @@ describe('changes from another tab', () => {
     channel.close()
   }
 
-  it.skipIf(typeof BroadcastChannel === 'undefined')(
+  it(
     'releases the session and asks to unlock again when there is no dirty draft',
     async () => {
       await seedLibrary()
@@ -494,7 +509,7 @@ describe('changes from another tab', () => {
     60000,
   )
 
-  it.skipIf(typeof BroadcastChannel === 'undefined')(
+  it(
     'conceals the library and offers recovery when a dirty draft exists',
     async () => {
       await seedLibrary()
@@ -524,4 +539,127 @@ describe('changes from another tab', () => {
     },
     60000,
   )
+})
+
+describe('session hardening', () => {
+  async function openRemoteRecovery(user: ReturnType<typeof typing>) {
+    await seedLibrary()
+    renderApp(true)
+    await unlockAndWaitForLibrary(user)
+    await typeDraft(user)
+    const header = await readHeader()
+    if (!header.ok || header.library !== 'present') throw new Error('expected a library')
+    const session = { header: header.header.header, generation: header.header.meta.generation, dataKey: vault.dataKey }
+    const next = await actualRewrap(session, PASSPHRASE, NEW_PASSPHRASE)
+    const result = await changePassphrase(
+      session,
+      { generation: session.generation, expectedRevision: header.header.meta.revision },
+      next,
+    )
+    if (!result.ok) throw new Error(result.message)
+    const channel = new BroadcastChannel('scratch-v1-changes')
+    channel.postMessage({ vaultId: next.vaultId, generation: session.generation, revision: result.snapshot.meta.revision })
+    channel.close()
+    await until(() =>
+      expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument(),
+    )
+  }
+
+  it('does not let an automatic lock discard the draft while recovery is showing', async () => {
+    const user = typing()
+    await openRemoteRecovery(user)
+
+    transitionVisibility(true)
+    jumpClock(61_000)
+    transitionVisibility(false)
+    advance(11 * MINUTE)
+    await act(async () => {
+      await new Promise<void>((resolve) => realSetTimeout(resolve, 50))
+    })
+    expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
+    expect(spies.discard).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Export backup' }))
+    await until(() => expect(screen.getByText('Backup exported.')).toBeInTheDocument())
+    expect(spies.exportRecovery.mock.calls[0][0].draft.input.body).toBe(DRAFT_TEXT)
+    await user.click(screen.getByRole('button', { name: 'Discard draft and reload' }))
+    await until(() => expectUnlockScreen())
+    expect(spies.discard).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a failing draft read during automatic lock like a seal failure', async () => {
+    await seedLibrary()
+    const user = typing()
+    renderApp(true)
+    await unlockAndWaitForLibrary(user)
+    await typeDraft(user)
+    readFails = true
+    advance(10 * MINUTE + 1000)
+    await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Discard draft and lock' }))
+    await until(() => expectUnlockScreen())
+  })
+
+  it('returns to locked with safe copy when unlocking throws', async () => {
+    await seedLibrary()
+    vi.mocked(crypto_.unlockVault).mockRejectedValueOnce(new Error('corrupt header'))
+    const user = typing()
+    renderApp()
+    await unlockThroughUi(user)
+    await until(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not unlock this vault. Try again.'))
+    expectUnlockScreen()
+    expect(screen.queryByRole('status', { name: 'Unlocking' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unlock' })).toBeEnabled()
+  })
+
+  it('disables Save draft and lock while saving so it runs once', async () => {
+    await seedLibrary()
+    vi.mocked(crypto_.sealEnvelope).mockRejectedValueOnce(new Error('encrypt failed'))
+    let finish!: (result: MutationResult) => void
+    spies.save.mockImplementation(() => new Promise<MutationResult>((resolve) => { finish = resolve }))
+    const user = typing()
+    renderApp(true)
+    await unlockAndWaitForLibrary(user)
+    await typeDraft(user)
+    advance(10 * MINUTE + 1000)
+    await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
+    const button = screen.getByRole('button', { name: 'Save draft and lock' })
+    await user.click(button)
+    await user.click(button)
+    expect(button).toBeDisabled()
+    expect(spies.save).toHaveBeenCalledTimes(1)
+    finish({ ok: false, code: 'quota', message: 'Not enough local storage space.' })
+    await until(() => expect(screen.getByRole('button', { name: 'Save draft and lock' })).toBeEnabled())
+  })
+
+  it('clears both setup fields after a failed create', async () => {
+    const user = typing()
+    render(<App />)
+    await until(() => screen.getByLabelText('Passphrase'))
+    await user.type(screen.getByLabelText('Passphrase'), 'short')
+    await user.type(screen.getByLabelText('Confirm passphrase'), 'short')
+    await user.click(screen.getByRole('button', { name: 'Create vault' }))
+    await until(() => expect(screen.getByRole('alert')).toHaveTextContent('at least 12'))
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Confirm passphrase')).toHaveValue('')
+  })
+
+  it('uses the wrong-passphrase copy only for a genuine wrong passphrase', async () => {
+    await seedLibrary()
+    vi.mocked(crypto_.rewrapVault).mockRejectedValueOnce(new Error('unexpected failure'))
+    const user = typing()
+    renderApp()
+    await unlockAndWaitForLibrary(user)
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(screen.getByRole('button', { name: 'Change passphrase' }))
+    const dialog = screen.getByRole('dialog', { name: 'Change passphrase' })
+    await user.type(within(dialog).getByLabelText('Current passphrase'), PASSPHRASE)
+    await user.type(within(dialog).getByLabelText('New passphrase'), NEW_PASSPHRASE)
+    await user.type(within(dialog).getByLabelText('Confirm new passphrase'), NEW_PASSPHRASE)
+    await user.click(within(dialog).getByRole('button', { name: 'Update passphrase' }))
+    await until(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Could not change the passphrase. Try again.'))
+    expect(within(dialog).getByRole('alert')).not.toHaveTextContent('incorrect')
+  })
 })
