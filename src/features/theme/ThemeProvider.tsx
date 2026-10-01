@@ -2,7 +2,7 @@ import { createContext, useContext, useLayoutEffect, useState, type ReactNode } 
 import { readThemePreference, resolveTheme, themeStorageKey, type ThemePreference } from './theme'
 
 type ThemeContextValue = { preference: ThemePreference, resolvedTheme: 'light' | 'dark', setPreference: (value: ThemePreference) => void }
-const ThemeContext = createContext<ThemeContextValue | null>(null)
+export const ThemeContext = createContext<ThemeContextValue | null>(null)
 const darkScheme = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

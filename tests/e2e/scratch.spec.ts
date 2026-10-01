@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 import {
   addCollection, addNote, createLibrary, exportBackup, fillEditor, importBackupOnSetup,
-  independentContextOptions, openAddMenu, PASSPHRASE, startUpdatableHost, SYNTHETIC_TOKEN, unlock, waitForControl,
+  independentContextOptions, openAddMenu, openSettings, PASSPHRASE, startUpdatableHost, SYNTHETIC_TOKEN, unlock, waitForControl,
 } from './helpers'
 
 // Whole-product flows through the real UI of the production preview build. The same
@@ -126,20 +126,29 @@ test('a library lives through creation, organization, search, reload, transfer, 
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     })
 
-    // The app has no Settings control for the theme yet, but ThemeProvider persists an
-    // explicit preference under this key and the pre-paint script in index.html reads
-    // it. The key is seeded directly; what is asserted is that an explicit Dark choice
-    // beats the system scheme (light) across a reload, before and after unlock.
-    await test.step('an explicit Dark preference survives a reload while the system is light', async () => {
-      await page.evaluate(() => localStorage.setItem('scratch-theme', 'dark'))
+    // Settings > Theme saves the choice; an explicit Dark beats the system scheme (light)
+    // across a reload, on the locked screen and after unlock, and System restores following.
+    await test.step('choosing Dark in Settings survives a reload while the system is light', async () => {
       await page.emulateMedia({ colorScheme: 'light' })
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+      await openSettings(page)
+      const dialog = page.getByRole('dialog', { name: 'Settings' })
+      await expect(dialog.getByRole('radio', { name: 'System' })).toBeChecked()
+      await dialog.getByRole('radio', { name: 'Dark' }).check()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+      await dialog.getByRole('button', { name: 'Close dialog' }).click()
       await page.reload()
       await expect(page.getByRole('heading', { name: 'Unlock Scratch' })).toBeVisible()
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
       await unlock(page)
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-      await page.evaluate(() => localStorage.removeItem('scratch-theme'))
+      await openSettings(page)
+      await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked()
+      await page.getByRole('radio', { name: 'System' }).check()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+      await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close dialog' }).click()
       await page.emulateMedia({ colorScheme: 'dark' })
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     })
 
     await test.step('a reload locks the library and unlocking brings back every item', async () => {

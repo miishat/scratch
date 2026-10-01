@@ -11,6 +11,16 @@ type DialogProps = {
   initialFocus?: string
 }
 const focusable = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+// What Tab actually visits: a named radio group is one stop (its checked radio, or
+// its first when none is checked), so the wrap-around at the ends lands on a real stop.
+function tabStops(root: HTMLElement | null): HTMLElement[] {
+  const all = Array.from(root?.querySelectorAll<HTMLElement>(focusable) ?? [])
+  return all.filter((element) => {
+    if (!(element instanceof HTMLInputElement) || element.type !== 'radio' || !element.name) return true
+    const group = all.filter((other): other is HTMLInputElement => other instanceof HTMLInputElement && other.type === 'radio' && other.name === element.name)
+    return element === (group.find((radio) => radio.checked) ?? group[0])
+  })
+}
 // Open dialogs, oldest first. Only the newest keeps focus inside itself, so two
 // stacked dialogs never pull focus back and forth.
 const openDialogs: HTMLElement[] = []
@@ -74,7 +84,7 @@ export function Dialog({ title, children, onRequestClose, canClose, className, i
   function onKeyDown(event: KeyboardEvent) {
     if (event.key === 'Escape') { event.stopPropagation(); requestClose(); return }
     if (event.key !== 'Tab') return
-    const elements = Array.from(ref.current?.querySelectorAll<HTMLElement>(focusable) ?? [])
+    const elements = tabStops(ref.current)
     if (elements.length === 0) { event.preventDefault(); ref.current?.focus(); return }
     const first = elements[0]
     const last = elements[elements.length - 1]

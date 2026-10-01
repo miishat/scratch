@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Dialog } from '../components/Dialog'
 import { exportBackup, saveBackupFile } from '../features/backup/backup'
+import { ThemeSetting } from '../features/theme/ThemeSetting'
 import { useVault } from '../features/vault/VaultProvider'
 
 type Props = { onClose: () => void, onChangePassphrase: () => void, onImportBackup: () => void }
@@ -49,5 +50,6 @@ export function SettingsDialog({ onClose, onChangePassphrase, onImportBackup }: 
       {status && <p role="status">{status}</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
     </section>
+    <ThemeSetting />
   </Dialog>
 }

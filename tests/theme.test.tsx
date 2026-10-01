@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useTheme, ThemeProvider } from '../src/features/theme/ThemeProvider'
 import { resolveTheme, readThemePreference } from '../src/features/theme/theme'
 import { App, AppShell } from '../src/app/App'
 import { Dialog } from '../src/components/Dialog'
+import { ThemeSetting } from '../src/features/theme/ThemeSetting'
 import { missingRequiredApis } from '../src/features/support/requiredApis'
 import { StorageUnavailableScreen, UnsupportedBrowserScreen } from '../src/features/support/SupportScreens'
 import { readFileSync } from 'node:fs'
@@ -40,10 +41,10 @@ function ThemeProbe() {
 
 describe('theme', () => {
   it('resolves an unset preference against a dark OS before React paints', () => {
-    const html = readFileSync('index.html', 'utf8')
-    const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
-    expect(bootstrap).toBeDefined()
-    window.eval(bootstrap!)
+    // The bootstrap is a same-origin file (no inline script, see the Content Security Policy).
+    expect(readFileSync('index.html', 'utf8')).toContain('<script src="theme-init.js"></script>')
+    const bootstrap = readFileSync('public/theme-init.js', 'utf8')
+    window.eval(bootstrap)
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     expect(resolveTheme(readThemePreference(), true)).toBe('dark')
     render(<ThemeProvider><ThemeProbe /></ThemeProvider>)
@@ -199,4 +200,63 @@ it('offers a retry when browser storage is unavailable', async () => {
   render(<StorageUnavailableScreen onRetry={retry} />)
   await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }))
   expect(retry).toHaveBeenCalledOnce()
+})
+
+describe('theme setting in Settings', () => {
+  it('offers System, Light, and Dark, selects the saved choice, and applies and saves a change', async () => {
+    const user = userEvent.setup()
+    dark = false
+    render(<ThemeProvider><ThemeSetting /></ThemeProvider>)
+    const group = screen.getByRole('radiogroup', { name: 'Theme' })
+    expect(within(group).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['system', 'light', 'dark'])
+    expect(within(group).getByRole('radio', { name: 'System' })).toBeChecked()
+    expect(document.documentElement.dataset.theme).toBe('light')
+    await user.click(within(group).getByRole('radio', { name: 'Dark' }))
+    expect(within(group).getByRole('radio', { name: 'Dark' })).toBeChecked()
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(localStorage.getItem('scratch-theme')).toBe('dark')
+    await user.click(within(group).getByRole('radio', { name: 'System' }))
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(localStorage.getItem('scratch-theme')).toBe('system')
+  })
+
+  it('shows the saved explicit choice as selected on the next visit', () => {
+    localStorage.setItem('scratch-theme', 'dark')
+    render(<ThemeProvider><ThemeSetting /></ThemeProvider>)
+    expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
+  })
+
+  it('is reachable by keyboard with arrow keys inside the group', async () => {
+    const user = userEvent.setup()
+    render(<ThemeProvider><ThemeSetting /></ThemeProvider>)
+    await user.tab()
+    expect(screen.getByRole('radio', { name: 'System' })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('radio', { name: 'Light' })).toBeChecked()
+  })
+})
+
+describe('dialog focus containment with radio groups', () => {
+  it('wraps Tab from the checked radio when the group is the last stop, instead of leaving the dialog', () => {
+    render(<Dialog title="Pick" onRequestClose={() => {}} canClose={() => true}>
+      <input type="radio" name="g" aria-label="One" defaultChecked />
+      <input type="radio" name="g" aria-label="Two" />
+    </Dialog>)
+    const one = screen.getByRole('radio', { name: 'One' })
+    one.focus()
+    const notPrevented = fireEvent.keyDown(one, { key: 'Tab' })
+    expect(notPrevented).toBe(false)
+    expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus()
+  })
+
+  it('wraps Shift+Tab from the first stop to the checked radio of the last group', () => {
+    render(<Dialog title="Pick" onRequestClose={() => {}} canClose={() => true}>
+      <input type="radio" name="g" aria-label="One" />
+      <input type="radio" name="g" aria-label="Two" defaultChecked />
+    </Dialog>)
+    const close = screen.getByRole('button', { name: 'Close dialog' })
+    close.focus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(screen.getByRole('radio', { name: 'Two' })).toHaveFocus()
+  })
 })
