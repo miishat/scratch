@@ -258,22 +258,25 @@ function UnlockedShell(props: AppProps) {
         recovered={composer.recovered}
         onClose={(outcome) => finish(outcome, 'compose')}
       />}
+      {/* Dialogs stay mounted while concealed, inside the same inert wrapper, so a
+          chosen file or typed text survives a brief tab switch (for example to a
+          file chooser or a password manager). Locking still unmounts them. */}
+      {organize.dialogs}
+      {dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} onChangePassphrase={() => setDialog('passphrase')} onImportBackup={() => setDialog('import')} />}
+      {dialog === 'import' && vault.session && <BackupDialog
+        replace={{
+          session: vault.session,
+          currentBase: () => library.snapshot ? { generation: library.snapshot.meta.generation, revision: library.snapshot.meta.revision } : null,
+        }}
+        onClose={() => setDialog(null)}
+        onImported={() => {
+          setDialog(null)
+          announce('Library replaced')
+          void navigation.openCollection(null)
+        }}
+      />}
+      {dialog === 'passphrase' && !hasDirtyDraft && <ChangePassphraseDialog onClose={() => setDialog(null)} />}
     </div>
-    {!hidden && organize.dialogs}
-    {!hidden && dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} onChangePassphrase={() => setDialog('passphrase')} onImportBackup={() => setDialog('import')} />}
-    {!hidden && dialog === 'import' && vault.session && <BackupDialog
-      replace={{
-        session: vault.session,
-        currentBase: () => library.snapshot ? { generation: library.snapshot.meta.generation, revision: library.snapshot.meta.revision } : null,
-      }}
-      onClose={() => setDialog(null)}
-      onImported={() => {
-        setDialog(null)
-        announce('Library replaced')
-        void navigation.openCollection(null)
-      }}
-    />}
-    {!hidden && dialog === 'passphrase' && !hasDirtyDraft && <ChangePassphraseDialog onClose={() => setDialog(null)} />}
     {lockError && <LockErrorPanel />}
     {!lockError && vault.remoteReplacement && <RemoteChangePanel snapshot={library.snapshot} session={vault.session} exportRecoveryBackup={exportRecoveryBackup} />}
   </>

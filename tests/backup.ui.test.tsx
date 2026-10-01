@@ -458,6 +458,84 @@ describe('stale tab recovery export', () => {
   })
 })
 
+function setHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') })
+  act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+}
+
+function resetVisibility() {
+  delete (document as unknown as Record<string, unknown>).hidden
+  delete (document as unknown as Record<string, unknown>).visibilityState
+}
+
+describe('dialogs survive concealing', () => {
+  it('keeps the chosen file and typed passphrase across a hide and show, exposing nothing while hidden', async () => {
+    await seedLibrary()
+    const user = userEvent.setup()
+    render(<App />)
+    await unlock(user)
+    await openImport(user)
+    await user.upload(screen.getByLabelText('Backup file'), await backupFile())
+    await user.type(screen.getByLabelText('Backup passphrase'), BACKUP_PHRASE)
+    try {
+      setHidden(true)
+      // The page is concealed: the dialog is out of the accessibility tree and inert.
+      expect(screen.queryByRole('dialog', { name: 'Import backup' })).not.toBeInTheDocument()
+      const dialog = screen.getByRole('dialog', { name: 'Import backup', hidden: true })
+      expect(dialog.closest('[inert]')).not.toBeNull()
+      expect(dialog.closest('[hidden]')).not.toBeNull()
+      // A concealed dialog never pulls focus away from whatever the person moved to.
+      const outside = document.createElement('button')
+      document.body.appendChild(outside)
+      outside.focus()
+      expect(outside).toHaveFocus()
+      outside.remove()
+      setHidden(false)
+    } finally {
+      resetVisibility()
+    }
+    expect((screen.getByLabelText('Backup file') as HTMLInputElement).files).toHaveLength(1)
+    expect(screen.getByLabelText('Backup passphrase')).toHaveValue(BACKUP_PHRASE)
+  })
+
+  it('keeps a typed collection title across a hide and show', async () => {
+    await seedLibrary()
+    const user = userEvent.setup()
+    render(<App />)
+    await unlock(user)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add collection' }))
+    await user.type(await screen.findByLabelText('Title'), 'Travel plans')
+    try {
+      setHidden(true)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      setHidden(false)
+    } finally {
+      resetVisibility()
+    }
+    expect(screen.getByLabelText('Title')).toHaveValue('Travel plans')
+  })
+
+  it('removes every dialog when the tab stays hidden long enough to lock', async () => {
+    await seedLibrary()
+    const user = userEvent.setup()
+    render(<App />)
+    await unlock(user)
+    await openImport(user)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      setHidden(true)
+      act(() => { vi.advanceTimersByTime(61_000) })
+    } finally {
+      vi.useRealTimers()
+      resetVisibility()
+    }
+    await screen.findByRole('heading', { name: 'Unlock Scratch' })
+    expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument()
+  })
+})
+
 describe('replacement outlives its dialog', () => {
   it('does not report success when the install was refused because the vault locked', async () => {
     await seedLibrary()
