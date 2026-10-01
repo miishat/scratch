@@ -25,6 +25,14 @@ import { closeChangeChannel, publishChange } from './changes'
 // generation, revision, and target version, write records, and increment the
 // revision. No Web Crypto, fetch, timer, or clipboard work runs inside a
 // transaction. A failure never reports success and never partially writes.
+//
+// No-library mapping: a missing vault (no header and no meta) is an explicit
+// "absent" result from readHeader so setup can distinguish it without treating
+// it as an error. Every other entry point that requires a library reports the
+// same condition as vault-changed.
+//
+// Tasks 4+ must not hand-build a VaultSession from a bare header; always use the
+// session returned by initializeLibrary so the generation comes from storage.
 
 // --- public result shapes ----------------------------------------------------
 
@@ -34,7 +42,8 @@ export interface StoredHeader {
 }
 
 export type ReadHeaderResult =
-  | { ok: true; header: StoredHeader | null }
+  | { ok: true; library: 'absent' }
+  | { ok: true; library: 'present'; header: StoredHeader }
   | ({ ok: false } & MutationFailure)
 
 export type InitializeResult =
@@ -162,6 +171,23 @@ function mapError(error: unknown): MutationFailure {
 
 // --- structural checks -------------------------------------------------------
 
+// The pinned vault format. These lengths and the iteration count must match
+// src/features/vault/crypto.ts so an unsupported header is never persisted.
+const PBKDF2_ITERATIONS = 600000
+const SALT_BYTES = 16
+const NONCE_BYTES = 12
+const WRAPPED_KEY_MIN_BYTES = 32 + 16
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/
+
+function base64ByteLength(value: unknown): number | null {
+  if (typeof value !== 'string' || value.length === 0 || value.length % 4 !== 0 || !BASE64_RE.test(value)) return null
+  try {
+    return atob(value).length
+  } catch {
+    return null
+  }
+}
+
 function isEnvelope(value: unknown): value is CipherEnvelope {
   if (typeof value !== 'object' || value === null) return false
   const envelope = value as Record<string, unknown>
@@ -171,14 +197,16 @@ function isEnvelope(value: unknown): value is CipherEnvelope {
 function isVaultHeader(value: unknown): value is VaultHeader {
   if (typeof value !== 'object' || value === null) return false
   const header = value as Record<string, unknown>
-  return (
-    typeof header.formatVersion === 'number' &&
-    typeof header.vaultId === 'string' &&
-    header.vaultId.length > 0 &&
-    typeof header.salt === 'string' &&
-    typeof header.iterations === 'number' &&
-    isEnvelope(header.wrappedDataKey)
-  )
+  if (header.formatVersion !== 1) return false
+  if (typeof header.vaultId !== 'string' || header.vaultId.length === 0) return false
+  if (header.iterations !== PBKDF2_ITERATIONS) return false
+  if (base64ByteLength(header.salt) !== SALT_BYTES) return false
+  if (!isEnvelope(header.wrappedDataKey)) return false
+  const wrapped = header.wrappedDataKey
+  if (base64ByteLength(wrapped.nonce) !== NONCE_BYTES) return false
+  const ciphertextBytes = base64ByteLength(wrapped.ciphertext)
+  if (ciphertextBytes === null || ciphertextBytes < WRAPPED_KEY_MIN_BYTES) return false
+  return true
 }
 
 function isMetaRecord(value: unknown): value is MetaRecord {
@@ -243,6 +271,12 @@ function requireVersion(context: MutationContext): number | null {
   return null
 }
 
+// The success snapshot is built from in-memory decrypted items the caller
+// already committed, so it cannot turn a committed write into a failure.
+function resultSnapshot(header: VaultHeader, meta: MetaRecord, items: LibraryItem[]): MutationResult {
+  return { ok: true, snapshot: { header, meta, items: sortItems(items) } }
+}
+
 // --- core reads --------------------------------------------------------------
 
 interface CoreState {
@@ -255,6 +289,35 @@ type CoreResult =
   | { status: 'ok'; state: CoreState }
   | { status: 'empty' }
   | { status: 'corrupt'; message: string }
+
+interface HeaderCore {
+  header: VaultHeader
+  meta: MetaRecord
+}
+
+type HeaderCoreResult =
+  | { status: 'ok'; value: HeaderCore }
+  | { status: 'empty' }
+  | { status: 'corrupt'; message: string }
+
+// Reads only the header and meta rows. This never opens the items store, so
+// deciding setup versus locked stays cheap on every cold start.
+async function headerWithin(): Promise<HeaderCoreResult> {
+  const db = getDatabase()
+  const vaultRow = await db.vault.get(HEADER_KEY)
+  const metaRow = await db.meta.get(META_KEY)
+  if (!vaultRow && !metaRow) return { status: 'empty' }
+  if (!vaultRow || !metaRow) return { status: 'corrupt', message: 'Local storage is inconsistent.' }
+  if (!isVaultHeader(vaultRow.header) || !isMetaRecord(metaRow)) {
+    return { status: 'corrupt', message: 'Local storage is corrupted.' }
+  }
+  return { status: 'ok', value: { header: vaultRow.header, meta: { revision: metaRow.revision, generation: metaRow.generation } } }
+}
+
+async function readHeaderCore(): Promise<HeaderCoreResult> {
+  const db = getDatabase()
+  return db.transaction('r', db.vault, db.meta, () => headerWithin())
+}
 
 // Reads header, meta, and items on the ambient transaction (or a fresh one if
 // none is open). No decryption happens here.
@@ -337,22 +400,39 @@ async function decryptRows(
   return { ok: true, items }
 }
 
+// Read the whole library and decrypt it before a mutation prepares its write.
+// The generation, vault, and revision are checked first so a stale session on a
+// replaced vault reports vault-changed (or conflict) instead of a decrypt
+// failure. Any decryption failure after that is a genuine pre-commit failure.
+async function readDecrypted(
+  session: VaultSession,
+  context: MutationContext,
+  checkRevision: boolean,
+): Promise<{ ok: true; state: CoreState; items: LibraryItem[] } | { ok: false; failure: MutationFailure }> {
+  const core = await readCore()
+  if (core.status !== 'ok') return { ok: false, failure: coreFailure(core) }
+  const failure = stateFailure(core.state, session, context, checkRevision)
+  if (failure) return { ok: false, failure }
+  const decrypted = await decryptRows(session, core.state.rows)
+  if (!decrypted.ok) return { ok: false, failure: decrypted.failure }
+  return { ok: true, state: core.state, items: decrypted.items }
+}
+
 async function snapshotFromStored(
   session: VaultSession,
   header: VaultHeader,
   meta: MetaRecord,
   rows: StoredItem[],
-  checkTree: boolean,
 ): Promise<MutationResult> {
   const decrypted = await decryptRows(session, rows)
   if (!decrypted.ok) return { ok: false, ...decrypted.failure }
-  if (checkTree) {
-    const errors = validateTree(decrypted.items)
-    if (errors.length > 0) return { ok: false, code: 'corrupt', message: 'The stored library is not a valid tree.' }
-  }
+  const errors = validateTree(decrypted.items)
+  if (errors.length > 0) return { ok: false, code: 'corrupt', message: 'The stored library is not a valid tree.' }
   return { ok: true, snapshot: { header, meta, items: sortItems(decrypted.items) } }
 }
 
+// Runs after a transaction has committed. Neither the persistence request nor
+// the notification may fail the mutation result.
 async function completeMutation(result: MutationResult): Promise<MutationResult> {
   if (!result.ok) return result
   await requestPersistence()
@@ -364,14 +444,18 @@ async function completeMutation(result: MutationResult): Promise<MutationResult>
   return result
 }
 
+function requireCommitted(outcome: WriteOutcome): MutationFailure | null {
+  return outcome.failure ?? (outcome.state ? null : unavailableFailure())
+}
+
 // --- header / load / raw snapshot --------------------------------------------
 
 export async function readHeader(): Promise<ReadHeaderResult> {
   try {
-    const core = await readCore()
-    if (core.status === 'empty') return { ok: true, header: null }
-    if (core.status === 'corrupt') return { ok: false, ...corruptFailure(core.message) }
-    return { ok: true, header: { header: core.state.header, meta: core.state.meta } }
+    const header = await readHeaderCore()
+    if (header.status === 'empty') return { ok: true, library: 'absent' }
+    if (header.status === 'corrupt') return { ok: false, ...corruptFailure(header.message) }
+    return { ok: true, library: 'present', header: header.value }
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -380,11 +464,10 @@ export async function readHeader(): Promise<ReadHeaderResult> {
 export async function loadLibrary(session: VaultSession): Promise<MutationResult> {
   try {
     const core = await readCore()
-    if (core.status === 'empty') return { ok: false, ...corruptFailure('No library is stored here.') }
-    if (core.status === 'corrupt') return { ok: false, ...corruptFailure(core.message) }
+    if (core.status !== 'ok') return { ok: false, ...coreFailure(core) }
     if (core.state.header.vaultId !== session.header.vaultId) return { ok: false, ...vaultChangedFailure() }
     if (core.state.meta.generation !== session.generation) return { ok: false, ...vaultChangedFailure() }
-    return await snapshotFromStored(session, core.state.header, core.state.meta, core.state.rows, true)
+    return await snapshotFromStored(session, core.state.header, core.state.meta, core.state.rows)
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -393,8 +476,7 @@ export async function loadLibrary(session: VaultSession): Promise<MutationResult
 export async function readStoredSnapshot(): Promise<ReadStoredSnapshotResult> {
   try {
     const core = await readCore()
-    if (core.status === 'empty') return { ok: false, ...unavailableFailure() }
-    if (core.status === 'corrupt') return { ok: false, ...corruptFailure(core.message) }
+    if (core.status !== 'ok') return { ok: false, ...coreFailure(core) }
     return { ok: true, snapshot: { header: core.state.header, meta: core.state.meta, items: core.state.rows } }
   } catch (error) {
     return { ok: false, ...mapError(error) }
@@ -417,7 +499,8 @@ export async function initializeLibrary(created: CreatedVault): Promise<Initiali
       await getDatabase().meta.put({ key: META_KEY, ...meta })
       return { state: { header: created.header, meta, rows: [] }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
     const generation = outcome.state.meta.generation
     publishChange({ vaultId: created.header.vaultId, generation, revision: outcome.state.meta.revision })
     return {
@@ -440,6 +523,9 @@ export async function createNote(
   try {
     const issues = validateNoteInput(input)
     if (issues.length > 0) return { ok: false, ...validationFailure(issues[0].message) }
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+
     const now = Date.now()
     const item: LibraryItem = {
       id: crypto.randomUUID(),
@@ -472,11 +558,11 @@ export async function createNote(
       await getDatabase().items.put(stored)
       const meta: MetaRecord = { revision: current.meta.revision + 1, generation: current.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: current.header, meta, rows }, failure: null }
+      return { state: { header: current.header, meta, rows: current.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, [...pre.items, item]))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -490,6 +576,9 @@ export async function createCollection(
   try {
     const issues = validateCollectionInput(input)
     if (issues.length > 0) return { ok: false, ...validationFailure(issues[0].message) }
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+
     const now = Date.now()
     const item: LibraryItem = {
       id: crypto.randomUUID(),
@@ -526,11 +615,11 @@ export async function createCollection(
       await getDatabase().items.put(stored)
       const meta: MetaRecord = { revision: current.meta.revision + 1, generation: current.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: current.header, meta, rows }, failure: null }
+      return { state: { header: current.header, meta, rows: current.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, [...pre.items, item]))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -550,12 +639,9 @@ export async function updateNote(
     const version = requireVersion(context)
     if (version === null) return { ok: false, ...validationFailure('A version is required to update a note.') }
 
-    const core = await readCore()
-    const current = core.status === 'ok' ? core.state : null
-    if (!current) return { ok: false, ...coreFailure(core) }
-    const failure = stateFailure(current, session, context, true)
-    if (failure) return { ok: false, ...failure }
-    const row = current.rows.find((candidate) => candidate.id === id)
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+    const row = pre.state.rows.find((candidate) => candidate.id === id)
     if (!row) return { ok: false, ...validationFailure('That note no longer exists.') }
     if (row.kind !== 'note') return { ok: false, ...validationFailure('That item is not a note.') }
     if (row.version !== version) return { ok: false, ...conflictFailure() }
@@ -587,11 +673,12 @@ export async function updateNote(
       await getDatabase().items.put(stored)
       const meta: MetaRecord = { revision: latest.meta.revision + 1, generation: latest.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: latest.header, meta, rows }, failure: null }
+      return { state: { header: latest.header, meta, rows: latest.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    const items = pre.items.map((candidate) => (candidate.id === id ? updated : candidate))
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, items))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -609,12 +696,9 @@ export async function updateCollection(
     const version = requireVersion(context)
     if (version === null) return { ok: false, ...validationFailure('A version is required to update a collection.') }
 
-    const core = await readCore()
-    const current = core.status === 'ok' ? core.state : null
-    if (!current) return { ok: false, ...coreFailure(core) }
-    const failure = stateFailure(current, session, context, true)
-    if (failure) return { ok: false, ...failure }
-    const row = current.rows.find((candidate) => candidate.id === id)
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+    const row = pre.state.rows.find((candidate) => candidate.id === id)
     if (!row) return { ok: false, ...validationFailure('That collection no longer exists.') }
     if (row.kind !== 'collection') return { ok: false, ...validationFailure('That item is not a collection.') }
     if (row.version !== version) return { ok: false, ...conflictFailure() }
@@ -646,11 +730,12 @@ export async function updateCollection(
       await getDatabase().items.put(stored)
       const meta: MetaRecord = { revision: latest.meta.revision + 1, generation: latest.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: latest.header, meta, rows }, failure: null }
+      return { state: { header: latest.header, meta, rows: latest.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    const items = pre.items.map((candidate) => (candidate.id === id ? updated : candidate))
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, items))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -668,14 +753,9 @@ export async function moveItem(
     const version = requireVersion(context)
     if (version === null) return { ok: false, ...validationFailure('A version is required to move an item.') }
 
-    const core = await readCore()
-    const current = core.status === 'ok' ? core.state : null
-    if (!current) return { ok: false, ...coreFailure(core) }
-    const failure = stateFailure(current, session, context, false)
-    if (failure) return { ok: false, ...failure }
-    const decrypted = await decryptRows(session, current.rows)
-    if (!decrypted.ok) return { ok: false, ...decrypted.failure }
-    const items = decrypted.items
+    const pre = await readDecrypted(session, context, false)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+    const items = pre.items
     const item = items.find((candidate) => candidate.id === id)
     if (!item) return { ok: false, ...validationFailure('That item no longer exists.') }
     if (item.version !== version) return { ok: false, ...conflictFailure() }
@@ -683,7 +763,7 @@ export async function moveItem(
     // A move to the current parent is a real no-op: report the current snapshot
     // without bumping the revision or re-encrypting anything.
     if (item.parentId === newParentId) {
-      return { ok: true, snapshot: { header: current.header, meta: current.meta, items: sortItems(items) } }
+      return resultSnapshot(pre.state.header, pre.state.meta, items)
     }
 
     if (newParentId !== null) {
@@ -720,11 +800,12 @@ export async function moveItem(
       await getDatabase().items.put(stored)
       const meta: MetaRecord = { revision: latest.meta.revision + 1, generation: latest.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: latest.header, meta, rows }, failure: null }
+      return { state: { header: latest.header, meta, rows: latest.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    const movedItems = items.map((candidate) => (candidate.id === id ? moved : candidate))
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, movedItems))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -741,16 +822,20 @@ export async function deleteItem(
     const version = requireVersion(context)
     if (version === null) return { ok: false, ...validationFailure('A version is required to delete an item.') }
 
-    const core = await readCore()
-    const current = core.status === 'ok' ? core.state : null
-    if (!current) return { ok: false, ...coreFailure(core) }
-    const failure = stateFailure(current, session, context, true)
-    if (failure) return { ok: false, ...failure }
-    const structural = current.rows.map(structuralItem)
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+
+    const structural = pre.state.rows.map(structuralItem)
     const target = structural.find((item) => item.id === id)
     if (!target) return { ok: false, ...validationFailure('That item no longer exists.') }
     if (target.version !== version) return { ok: false, ...conflictFailure() }
+
+    // The visited guard in descendantsOf keeps this safe if the stored tree was
+    // tampered into a cycle; validateTree then reports the corruption.
     const subtree = [id, ...descendantsOf(structural, id)]
+    if (validateTree(structural).length > 0) {
+      return { ok: false, ...corruptFailure('The stored library is not a valid tree.') }
+    }
     const subtreeKey = [...subtree].sort().join('\u0000')
 
     const outcome = await runWrite(async () => {
@@ -771,11 +856,13 @@ export async function deleteItem(
       await getDatabase().items.bulkDelete(latestSubtree)
       const meta: MetaRecord = { revision: latest.meta.revision + 1, generation: latest.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: latest.header, meta, rows }, failure: null }
+      return { state: { header: latest.header, meta, rows: latest.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    const removed = new Set(subtree)
+    const items = pre.items.filter((candidate) => !removed.has(candidate.id))
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, items))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -793,6 +880,10 @@ export async function changePassphrase(
     if (newHeader.vaultId !== session.header.vaultId) {
       return { ok: false, ...validationFailure('The new vault header belongs to a different library.') }
     }
+
+    const pre = await readDecrypted(session, context, true)
+    if (!pre.ok) return { ok: false, ...pre.failure }
+
     const outcome = await runWrite(async () => {
       const core = await coreWithin()
       const current = core.status === 'ok' ? core.state : null
@@ -802,11 +893,11 @@ export async function changePassphrase(
       await getDatabase().vault.put({ key: HEADER_KEY, header: newHeader })
       const meta: MetaRecord = { revision: current.meta.revision + 1, generation: current.meta.generation }
       await getDatabase().meta.put({ key: META_KEY, ...meta })
-      const rows = await getDatabase().items.toArray()
-      return { state: { header: newHeader, meta, rows }, failure: null }
+      return { state: { header: newHeader, meta, rows: current.rows }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation(await snapshotFromStored(session, outcome.state.header, outcome.state.meta, outcome.state.rows, false))
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, pre.items))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }
@@ -861,11 +952,9 @@ export async function replaceLibrary(
       await getDatabase().meta.put({ key: META_KEY, ...meta })
       return { state: { header: session.header, meta, rows: records }, failure: null }
     })
-    if (outcome.failure || !outcome.state) return { ok: false, ...(outcome.failure ?? unavailableFailure()) }
-    return await completeMutation({
-      ok: true,
-      snapshot: { header: session.header, meta: outcome.state.meta, items: sortItems(decrypted.items) },
-    })
+    const failure = requireCommitted(outcome)
+    if (failure || !outcome.state) return { ok: false, ...(failure ?? unavailableFailure()) }
+    return completeMutation(resultSnapshot(outcome.state.header, outcome.state.meta, decrypted.items))
   } catch (error) {
     return { ok: false, ...mapError(error) }
   }

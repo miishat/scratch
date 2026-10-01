@@ -29,7 +29,13 @@ let channel: BroadcastChannel | null = null
 
 function changeChannel(): BroadcastChannel | null {
   if (typeof BroadcastChannel === 'undefined') return null
-  if (!channel) channel = new BroadcastChannel(CHANNEL_NAME)
+  if (!channel) {
+    try {
+      channel = new BroadcastChannel(CHANNEL_NAME)
+    } catch {
+      channel = null
+    }
+  }
   return channel
 }
 
@@ -43,10 +49,16 @@ function isChangeNotification(value: unknown): value is ChangeNotification {
   )
 }
 
+// Publishing is best-effort: a closed or unavailable channel must never turn an
+// already-committed mutation into a reported failure.
 export function publishChange(change: ChangeNotification): void {
   const current = changeChannel()
   if (!current) return
-  current.postMessage(change)
+  try {
+    current.postMessage(change)
+  } catch {
+    // Ignore notification failures; the commit already succeeded.
+  }
 }
 
 export function subscribeToChanges(listener: ChangeListener): ChangeSubscription {

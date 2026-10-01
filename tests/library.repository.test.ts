@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createVault, encryptItem, rewrapVault, unlockVault } from '../src/features/vault/crypto'
-import type { CreatedVault, VaultSession } from '../src/features/vault/types'
+import type { CreatedVault, VaultHeader, VaultSession } from '../src/features/vault/types'
 import type {
   LibraryItem,
   LibrarySnapshot,
@@ -141,8 +141,7 @@ describe('repository persistence and encryption at rest', () => {
     await closeDatabase()
 
     const header = await readHeader()
-    expect(header.ok).toBe(true)
-    if (!header.ok || header.header === null) throw new Error('no header after reopen')
+    if (!header.ok || header.library !== 'present') throw new Error('no header after reopen')
     const unlocked = await unlockVault(header.header.header, fixturePassphrase, header.header.meta.generation)
     expect(unlocked.ok).toBe(true)
     if (!unlocked.ok) throw new Error(unlocked.message)
@@ -226,6 +225,7 @@ describe('repository atomicity', () => {
     } finally {
       db.items.hook('creating').unsubscribe(hook)
     }
+    expect(creations).toBeGreaterThanOrEqual(2)
 
     const after = await readStoredSnapshot()
     expect(after.ok).toBe(true)
@@ -527,7 +527,7 @@ describe('repository timestamps and passphrase', () => {
     if (!changed.ok) throw new Error(changed.message)
 
     const header = await readHeader()
-    if (!header.ok || header.header === null) throw new Error('no header')
+    if (!header.ok || header.library !== 'present') throw new Error('no header')
     expect(header.header.header.salt).toBe(newHeader.salt)
 
     const unlocked = await unlockVault(newHeader, NEW_PASSPHRASE, changed.snapshot.meta.generation)
@@ -596,5 +596,146 @@ describe('change notifications', () => {
     } finally {
       channel.close()
     }
+  })
+})
+
+describe('repository read paths and header guards', () => {
+  it('reports an explicit absent library before setup', async () => {
+    const header = await readHeader()
+    expect(header.ok).toBe(true)
+    if (!header.ok) throw new Error(header.message)
+    expect(header.library).toBe('absent')
+  })
+
+  it('reads the header without loading item rows', async () => {
+    const { session, snapshot } = await setup()
+    const created = await createNote(session, contextOf(snapshot), noteInput('header read body'))
+    if (!created.ok) throw new Error(created.message)
+
+    const db = getDatabase()
+    const spy = vi.spyOn(db.items, 'toArray')
+    const header = await readHeader()
+    expect(header.ok).toBe(true)
+    if (!header.ok) throw new Error(header.message)
+    expect(header.library).toBe('present')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unsupported vault header and never persists it', async () => {
+    const { session, snapshot } = await setup()
+    const created = await createNote(session, contextOf(snapshot), noteInput('header guard'))
+    if (!created.ok) throw new Error(created.message)
+
+    const badHeader = { ...session.header, formatVersion: 2 } as unknown as VaultHeader
+    const result = await changePassphrase(session, contextOf(created.snapshot), badHeader)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unexpected success')
+    expect(result.code).toBe('validation')
+
+    const header = await readHeader()
+    if (!header.ok || header.library !== 'present') throw new Error('no header')
+    expect(header.header.header.formatVersion).toBe(1)
+    expect(header.header.header.salt).toBe(session.header.salt)
+  })
+})
+
+describe('repository committed-write reporting', () => {
+  it('reports success even when publishing a change fails', async () => {
+    class ThrowingChannel {
+      postMessage(): void {
+        throw new Error('channel unavailable')
+      }
+      addEventListener(): void {}
+      removeEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal('BroadcastChannel', ThrowingChannel as unknown as typeof BroadcastChannel)
+
+    const { session, snapshot } = await setup()
+    const created = await createNote(session, contextOf(snapshot), noteInput('saved despite publish failure'))
+    expect(created.ok).toBe(true)
+    if (!created.ok) throw new Error(created.message)
+    expect(created.snapshot.items).toHaveLength(1)
+    expect(created.snapshot.meta.revision).toBe(snapshot.meta.revision + 1)
+  })
+})
+
+describe('repository unseen-descendant and corrupt-tree guards', () => {
+  it('refuses to delete when an unseen descendant appeared without a revision change', async () => {
+    const { session, snapshot } = await setup()
+    const parent = await createCollection(session, contextOf(snapshot), { parentId: null, title: 'Guarded', color: 'sage' })
+    if (!parent.ok) throw new Error(parent.message)
+    const parentId = parent.snapshot.items[0].id
+    const parentVersion = parent.snapshot.items[0].version
+
+    const child = await createNote(session, contextOf(parent.snapshot), noteInput('existing child', { parentId }))
+    if (!child.ok) throw new Error(child.message)
+    const childId = child.snapshot.items.find((item) => item.parentId === parentId)!.id
+    const context: MutationContext = {
+      generation: child.snapshot.meta.generation,
+      expectedRevision: child.snapshot.meta.revision,
+      expectedVersion: parentVersion,
+    }
+
+    const extraItem = importedNote(vaultA.header.vaultId, 'unseen child')
+    const extraStored = await encryptItem(session, { ...extraItem, parentId })
+
+    // Add the child between the delete's pre-read and its write transaction so
+    // the revision still matches and only the subtree comparison can catch it.
+    const db = getDatabase()
+    const original = db.items.toArray.bind(db.items)
+    let calls = 0
+    db.items.toArray = (async () => {
+      calls += 1
+      if (calls === 2) await db.items.put(extraStored)
+      return original()
+    }) as typeof db.items.toArray
+    try {
+      const result = await deleteItem(session, context, parentId)
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unexpected success')
+      expect(result.code).toBe('conflict')
+      expect(calls).toBeGreaterThanOrEqual(2)
+    } finally {
+      db.items.toArray = original
+    }
+
+    const stored = await readStoredSnapshot()
+    if (!stored.ok) throw new Error(stored.message)
+    const ids = stored.snapshot.items.map((item) => item.id)
+    expect(ids).toContain(parentId)
+    expect(ids).toContain(childId)
+    expect(ids).toContain(extraItem.id)
+  })
+
+  it('reports corrupt instead of hanging when the stored tree contains a cycle', async () => {
+    const { session, snapshot } = await setup()
+    const outer = await createCollection(session, contextOf(snapshot), { parentId: null, title: 'Outer', color: 'sage' })
+    if (!outer.ok) throw new Error(outer.message)
+    const outerItem = outer.snapshot.items[0]
+
+    const inner = await createCollection(session, contextOf(outer.snapshot), { parentId: outerItem.id, title: 'Inner', color: 'clay' })
+    if (!inner.ok) throw new Error(inner.message)
+    const innerId = inner.snapshot.items.find((item) => item.parentId === outerItem.id)!.id
+
+    // Re-encrypt Outer so it still authenticates after its parent changes,
+    // then store it directly to introduce a cycle with no revision change.
+    const db = getDatabase()
+    const cycled = await encryptItem(session, { ...outerItem, parentId: innerId })
+    await db.items.put(cycled)
+
+    const result = await deleteItem(
+      session,
+      { generation: inner.snapshot.meta.generation, expectedRevision: inner.snapshot.meta.revision, expectedVersion: outerItem.version },
+      outerItem.id,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unexpected success')
+    expect(result.code).toBe('corrupt')
+
+    const stored = await readStoredSnapshot()
+    if (!stored.ok) throw new Error(stored.message)
+    const ids = stored.snapshot.items.map((item) => item.id).sort()
+    expect(ids).toEqual([outerItem.id, innerId].sort())
   })
 })

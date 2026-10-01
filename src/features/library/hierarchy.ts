@@ -43,6 +43,7 @@ export function collectionDepth(items: LibraryItem[], parentId: ItemId | null): 
 }
 
 // All descendant ids of the item with the given id, excluding the item itself.
+// A visited set guards against cycles introduced by direct database tampering.
 export function descendantsOf(items: LibraryItem[], id: ItemId): ItemId[] {
   const childrenByParent = new Map<ItemId, ItemId[]>()
   for (const item of items) {
@@ -52,9 +53,12 @@ export function descendantsOf(items: LibraryItem[], id: ItemId): ItemId[] {
     childrenByParent.set(item.parentId, list)
   }
   const result: ItemId[] = []
+  const visited = new Set<ItemId>([id])
   const stack = [...(childrenByParent.get(id) ?? [])]
   while (stack.length > 0) {
     const current = stack.pop()!
+    if (visited.has(current)) continue
+    visited.add(current)
     result.push(current)
     stack.push(...(childrenByParent.get(current) ?? []))
   }
