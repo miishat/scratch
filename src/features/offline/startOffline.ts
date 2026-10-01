@@ -7,6 +7,7 @@ export function startOffline(): void {
   offlineStore.start((callbacks) => registerSW({
     immediate: true,
     onNeedRefresh: callbacks.onNeedRefresh,
+    onNeedReload: callbacks.onNeedReload,
     onOfflineReady: callbacks.onOfflineReady,
     onRegisteredSW: callbacks.onRegisteredSW,
     onRegisterError: callbacks.onRegisterError,

@@ -75,6 +75,21 @@ describe('UpdateNotice', () => {
     await waitFor(() => expect(reload).toHaveBeenCalled(), { timeout: 3000 })
   })
 
+  it('an update approved in another tab leaves a dirty draft running and offers the update', async () => {
+    const user = userEvent.setup()
+    const { store, update, reload, callbacks } = makeStore()
+    const draft = makeDraft(async () => ({ ok: true }))
+    await setup(draft, store)
+    act(() => callbacks().onNeedRefresh())
+    act(() => callbacks().onNeedReload())
+    expect(reload).not.toHaveBeenCalled()
+    expect(draft.discard).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: 'Update now' }))
+    expect(await screen.findByRole('button', { name: 'Save and update' })).toBeInTheDocument()
+    expect(update).not.toHaveBeenCalled()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
   it('Later hides the prompt without activating', async () => {
     const user = userEvent.setup()
     const { store, update, callbacks } = makeStore()

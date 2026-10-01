@@ -109,6 +109,63 @@ describe('offline registration state', () => {
     }
   })
 
+  describe('another tab approving an update', () => {
+    it('does not reload this tab and offers the update instead', () => {
+      const reload = vi.fn()
+      const store = createOfflineStore({ onControllerChange: () => () => {}, reload, activationTimeoutMs: 1000 })
+      const fake = fakeRegister()
+      store.start(fake.register, true)
+      fake.callbacks().onNeedReload()
+      expect(reload).not.toHaveBeenCalled()
+      expect(store.getState().updateReady).toBe(true)
+    })
+
+    it('reloads on the next Update now without asking the worker again', async () => {
+      const reload = vi.fn()
+      const store = createOfflineStore({ onControllerChange: () => () => {}, reload, activationTimeoutMs: 1000 })
+      const fake = fakeRegister()
+      store.start(fake.register, true)
+      fake.callbacks().onNeedReload()
+      await store.activateUpdate()
+      expect(fake.update).not.toHaveBeenCalled()
+      expect(reload).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads exactly once when this tab started the activation', async () => {
+      const reload = vi.fn()
+      const fake = fakeRegister()
+      const environment: OfflineEnvironment = {
+        onControllerChange: (callback) => { queueMicrotask(() => { callback(); fake.callbacks().onNeedReload() }); return () => {} },
+        reload,
+        activationTimeoutMs: 1000,
+      }
+      const store = createOfflineStore(environment)
+      store.start(fake.register, true)
+      await store.activateUpdate()
+      await Promise.resolve()
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(store.getState().updateReady).toBe(false)
+    })
+
+    it('treats a takeover after the timeout as external and does not reload', async () => {
+      vi.useFakeTimers()
+      try {
+        const reload = vi.fn()
+        const fake = fakeRegister()
+        const store = createOfflineStore({ onControllerChange: () => () => {}, reload, activationTimeoutMs: 1000 })
+        store.start(fake.register, true)
+        const outcome = expect(store.activateUpdate()).rejects.toThrow()
+        await vi.advanceTimersByTimeAsync(1001)
+        await outcome
+        fake.callbacks().onNeedReload()
+        expect(reload).not.toHaveBeenCalled()
+        expect(store.getState().updateReady).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
   it('starts only once', () => {
     const store = createOfflineStore()
     const fake = fakeRegister()

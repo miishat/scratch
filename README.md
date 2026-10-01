@@ -49,7 +49,7 @@ Notes are kept in the browser's site storage for this address. Clearing site dat
 - Scratch needs one online visit first. The first load downloads the app and stores it in the browser; after that it opens without a network. A browser that has never loaded Scratch cannot open it offline, and the first visit on a new device needs a connection.
 - Installing Scratch as an app (the browser's Install, or Add to Home Screen on a phone) needs HTTPS. `http://localhost` also works for local testing. A plain `http://` address on another host cannot be installed and has no offline use, but notes still work there.
 - On a phone: open the HTTPS address in the browser, then use Add to Home Screen or Install in the browser menu. On desktop Chrome or Edge, use the install icon in the address bar or the menu. Safari on a Mac uses File, then Add to Dock. Installed or not, the library lives in that browser's storage for the address.
-- When a new version is available, Scratch asks before updating. If you have an unsaved note you can save it, discard it, or cancel and keep writing. Updating reloads the app, so you will unlock it again.
+- When a new version is available, Scratch asks before updating. If you have an unsaved note you can save it, discard it, or cancel and keep writing. Updating reloads the app, so you will unlock it again. If you approve an update in one tab, other open tabs are not reloaded: they keep running (so an unsaved note there is safe) and offer the same update, which reloads that tab when you choose it.
 - The offline cache holds only the app files (page, scripts, styles, fonts, icons). It never holds notes, backups, or your passphrase.
 
 ## Production static hosting

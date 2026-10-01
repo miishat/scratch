@@ -15,6 +15,9 @@ export interface OfflineState {
 
 export interface RegisterCallbacks {
   onNeedRefresh: () => void
+  // The library's request to reload because a new worker took control. The store
+  // reloads only for an activation this tab started; see activateUpdate.
+  onNeedReload: () => void
   onOfflineReady: () => void
   onRegisteredSW: () => void
   onRegisterError: () => void
@@ -55,6 +58,12 @@ export function createOfflineStore(environment: OfflineEnvironment = browserEnvi
   let state: OfflineState = { support: 'idle', offlineReady: false, updateReady: false }
   let updateWorker: ((reloadPage?: boolean) => Promise<void>) | null = null
   let started = false
+  // True from the moment this tab asks the worker to activate until the attempt
+  // times out or fails. Only then may a takeover reload the page.
+  let initiated = false
+  // A new worker already controls this page without this tab having asked (another
+  // tab approved the update), so the running scripts may not match the cache.
+  let takenOver = false
   const listeners = new Set<() => void>()
 
   function set(patch: Partial<OfflineState>): void {
@@ -79,6 +88,14 @@ export function createOfflineStore(environment: OfflineEnvironment = browserEnvi
       try {
         updateWorker = register({
           onNeedRefresh: () => set({ updateReady: true }),
+          onNeedReload: () => {
+            if (initiated) return
+            // Another tab (or a late takeover) updated the worker. Reloading here
+            // could discard an unsaved draft, so the page keeps running and the
+            // update notice stays until the person chooses.
+            takenOver = true
+            set({ updateReady: true })
+          },
           onOfflineReady: () => set({ offlineReady: true }),
           onRegisteredSW: () => set({ support: 'registered' }),
           onRegisterError: () => set({ support: 'failed' }),
@@ -87,15 +104,26 @@ export function createOfflineStore(environment: OfflineEnvironment = browserEnvi
         set({ support: 'failed' })
       }
     },
-    // Reloading is done here rather than by the worker library, which skips the
-    // reload when this page was itself claimed by the first install.
+    // The worker library reloads on its own whenever a new worker takes control
+    // (its reload argument is ignored in prompt mode) unless onNeedReload is passed.
+    // It is passed, so this method is the only place that reloads for an update
+    // this tab asked for.
     async activateUpdate() {
       if (!updateWorker) throw new Error('No worker to update.')
+      if (takenOver) {
+        // Nothing is left to activate; only this page's stale scripts remain.
+        environment.reload()
+        return
+      }
       const activate = updateWorker
+      initiated = true
       await new Promise<void>((resolve, reject) => {
-        // A late takeover after giving up must not reload the page unasked.
+        // A late takeover after giving up must not reload the page unasked: this
+        // listener is removed on timeout, and onNeedReload then treats the takeover
+        // as external (notice only).
         let stopListening = () => {}
         const timer = setTimeout(() => {
+          initiated = false
           stopListening()
           reject(new Error('The update did not activate.'))
         }, environment.activationTimeoutMs)
@@ -105,6 +133,7 @@ export function createOfflineStore(environment: OfflineEnvironment = browserEnvi
         })
         activate(false).catch((cause: unknown) => {
           clearTimeout(timer)
+          initiated = false
           stopListening()
           reject(cause)
         })
