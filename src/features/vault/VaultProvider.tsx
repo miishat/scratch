@@ -61,14 +61,19 @@ export interface VaultContextValue {
   automaticLock: () => Promise<void>
   changePassphrase: (current: string, next: string) => Promise<ActionResult>
   // Ends the current session (if any) and starts one for a library that was just
-  // imported, using the generation the repository returned. Setup or unlocked only.
-  installSession: (next: VaultSession) => void
+  // imported, using the generation the repository returned. Setup or unlocked only,
+  // and only while the session it started from (null for setup) is still the one
+  // in place, so a lock during the replacement can never install a session.
+  installSession: (next: VaultSession, from: VaultSession | null) => void
   registerDraft: (draft: DirtyDraft) => () => void
   readDraft: () => DraftContent | null
   saveAndLock: () => Promise<void>
   discardAndLock: () => void
   cancelLock: () => void
   discardDraftAndReload: () => void
+  // Lifts the other-tab recovery panel so the editor is reachable again. The draft
+  // is kept; saving it meets the usual replaced-library handling.
+  keepEditing: () => void
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null)
@@ -101,6 +106,9 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const locking = useRef(false)
   // Mirrors remoteReplacement so timers can see it without resubscribing.
   const remoteRef = useRef(false)
+  // Set once the person chose Keep editing after another tab replaced the vault:
+  // this tab's session is stale, so a lock may never seal the draft for later.
+  const staleRef = useRef(false)
   // Bumped whenever the session ends or an unlock begins, so a slow unlock or
   // header check can never act after the situation it started in has changed.
   const epoch = useRef(0)
@@ -142,6 +150,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       setLockErrorMessage(null)
       setLockNotice(null)
       remoteRef.current = false
+      staleRef.current = false
       setRemoteReplacement(false)
       setRecoveredDraft(null)
       setError(null)
@@ -153,6 +162,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
 
   const startSession = useCallback(
     (next: VaultSession, recovered: DraftContent | null): void => {
+      staleRef.current = false
       sessionRef.current = next
       lastActivity.current = Date.now()
       setSession(next)
@@ -255,6 +265,13 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     // While the other-tab recovery panel holds a draft, no timer may release the
     // session: the draft would be sealed against a vault that no longer exists.
     if (remoteRef.current) return
+    // After Keep editing the session describes a replaced library, so a sealed
+    // draft could never be offered back. Bring the recovery panel back instead.
+    if (staleRef.current && draftRef.current) {
+      remoteRef.current = true
+      setRemoteReplacement(true)
+      return
+    }
     locking.current = true
     // Conceal first: nothing decrypted may stay visible while sealing runs.
     setConcealed(true)
@@ -351,6 +368,13 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     releaseSession(CHANGED_ELSEWHERE)
   }, [releaseSession])
 
+  const keepEditing = useCallback((): void => {
+    if (!draftRef.current) return
+    staleRef.current = true
+    remoteRef.current = false
+    setRemoteReplacement(false)
+  }, [])
+
   const changePassphrase = useCallback(async (current: string, next: string): Promise<ActionResult> => {
     const active = sessionRef.current
     if (!active || stateRef.current !== 'unlocked') return { ok: false, message: 'Scratch is locked.' }
@@ -386,8 +410,10 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   }, [])
 
   const installSession = useCallback(
-    (next: VaultSession): void => {
+    (next: VaultSession, from: VaultSession | null): void => {
       if (stateRef.current !== 'setup' && stateRef.current !== 'unlocked') return
+      const current = sessionRef.current
+      if (from === null ? current !== null : current === null || current.header.vaultId !== from.header.vaultId || current.generation !== from.generation) return
       // The old session, its draft bookkeeping, and any sealed draft belong to the
       // library that was just replaced.
       epoch.current += 1
@@ -515,11 +541,13 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       discardAndLock,
       cancelLock,
       discardDraftAndReload,
+      keepEditing,
     }),
     [
       state, session, concealed, error, notice, recoveredDraft, clearRecoveredDraft, hasDirtyDraft,
       remoteReplacement, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
       changePassphrase, installSession, registerDraft, readDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
+      keepEditing,
     ],
   )
 

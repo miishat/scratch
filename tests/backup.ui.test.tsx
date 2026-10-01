@@ -1,9 +1,9 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app/App'
 import { ThemeProvider } from '../src/features/theme/ThemeProvider'
-import { prepareImport, writeBackup } from '../src/features/backup/backup'
+import { commitImport, prepareImport, writeBackup } from '../src/features/backup/backup'
 import { createVault, encryptItem } from '../src/features/vault/crypto'
 import type { CreatedVault, VaultSession } from '../src/features/vault/types'
 import type { LibraryItem } from '../src/features/library/types'
@@ -12,6 +12,7 @@ import {
   initializeLibrary,
   loadLibrary,
   readStoredSnapshot,
+  replaceLibrary,
   resetRepositoryForTests,
 } from '../src/features/library/repository'
 import { closeDatabase, deleteDatabase, useDatabaseName } from '../src/features/library/database'
@@ -19,6 +20,11 @@ import type { ChangeNotification } from '../src/features/library/changes'
 
 // The import, replace, and export flows through the real app, vault, and
 // fake-indexeddb repository.
+
+vi.mock('../src/features/backup/backup', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/features/backup/backup')>()
+  return { ...actual, commitImport: vi.fn(actual.commitImport) }
+})
 
 vi.setConfig({ testTimeout: 90000 })
 
@@ -308,7 +314,6 @@ describe('stale tab recovery export', () => {
 
     // Another tab replaces the whole library.
     const state = await stored()
-    const { commitImport } = await import('../src/features/backup/backup')
     const prepared = await prepareImport(await backupFile(), BACKUP_PHRASE)
     if (!prepared.ok) throw new Error(prepared.message)
     const committed = await commitImport(prepared.prepared, { generation: state.meta.generation, revision: state.meta.revision })
@@ -325,31 +330,141 @@ describe('stale tab recovery export', () => {
     expect(recovered.ok && recovered.prepared.itemCount).toBe(2)
   })
 
-  it('keeps the draft and says why when it cannot be exported', async () => {
+  // A stale tab: an unsaved secret note without a title, while another tab
+  // replaces the whole library. Returns a helper that announces another change.
+  async function openStaleTab(user: ReturnType<typeof userEvent.setup>) {
     await seedLibrary()
-    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:never'), revokeObjectURL: vi.fn() }))
-    const user = userEvent.setup()
     render(<App />)
     await unlock(user)
     await user.click(screen.getByRole('button', { name: 'Add' }))
     await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add note' }))
-    const body = screen.getByRole('textbox', { name: 'Note body' })
-    await user.type(body, 'x')
+    await user.type(screen.getByRole('textbox', { name: 'Note body' }), 'x')
     await user.click(screen.getByRole('checkbox', { name: /secret/i }))
-
-    const channel = new BroadcastChannel('scratch-v1-changes')
     const state = await stored()
-    const { commitImport } = await import('../src/features/backup/backup')
     const prepared = await prepareImport(await backupFile(), BACKUP_PHRASE)
     if (!prepared.ok) throw new Error(prepared.message)
     const committed = await commitImport(prepared.prepared, { generation: state.meta.generation, revision: state.meta.revision })
     if (!committed.ok) throw new Error(committed.message)
-    channel.postMessage({ vaultId: committed.snapshot.header.vaultId, generation: committed.snapshot.meta.generation, revision: committed.snapshot.meta.revision })
-    channel.close()
+    const notify = () => {
+      const channel = new BroadcastChannel('scratch-v1-changes')
+      channel.postMessage({ vaultId: committed.snapshot.header.vaultId, generation: committed.snapshot.meta.generation, revision: committed.snapshot.meta.revision })
+      channel.close()
+    }
+    notify()
+    return notify
+  }
+
+  it('keeps an invalid draft reachable: Keep editing, then export works once it is fixed', async () => {
+    const blobs: Blob[] = []
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn((blob: Blob) => { blobs.push(blob); return 'blob:fixed' }), revokeObjectURL: vi.fn() }))
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    const notify = await openStaleTab(user)
 
     await user.click(await screen.findByRole('button', { name: 'Export backup' }))
     expect(await screen.findByText(/A secret note requires a title/)).toBeInTheDocument()
-    expect(screen.getByText(/Your draft is still here/)).toBeInTheDocument()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    const body = screen.getByRole('textbox', { name: 'Note body' })
+    expect(body).toBeVisible()
+    expect(body).toHaveValue('x')
+    expect(screen.queryByRole('heading', { name: 'This library changed in another tab' })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Title'), 'Fixed title')
+
+    // The next change notification brings the panel back with the corrected draft.
+    notify()
+    await user.click(await screen.findByRole('button', { name: 'Export backup' }))
+    expect(await screen.findByText('Backup exported.')).toBeInTheDocument()
+    const recovered = await prepareImport(blobs[0], PHRASE)
+    expect(recovered.ok && recovered.prepared.itemCount).toBe(2)
+  })
+
+  it('after Keep editing, an automatic lock conceals the draft again instead of dropping it', async () => {
+    const user = userEvent.setup()
+    await openStaleTab(user)
+    await user.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('textbox', { name: 'Note body' })).toHaveValue('x')
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+      act(() => { vi.advanceTimersByTime(61_000) })
+    } finally {
+      vi.useRealTimers()
+      delete (document as unknown as Record<string, unknown>).hidden
+      delete (document as unknown as Record<string, unknown>).visibilityState
+    }
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toBeInTheDocument()
+    // The draft text is still in the (hidden) editor.
+    expect(screen.getByRole('textbox', { name: 'Note body', hidden: true })).toHaveValue('x')
+  })
+})
+
+describe('replacement outlives its dialog', () => {
+  it('installs the imported session even when the dialog unmounts during the commit', async () => {
+    await seedLibrary()
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const real = (await vi.importActual<typeof import('../src/features/backup/backup')>('../src/features/backup/backup')).commitImport
+    vi.mocked(commitImport).mockImplementationOnce(async (prepared, base) => {
+      await gate
+      return real(prepared, base)
+    })
+    const user = userEvent.setup()
+    render(<App />)
+    await unlock(user)
+    await openImport(user)
+    await chooseAndReview(user, await backupFile(), BACKUP_PHRASE)
+    await screen.findByText('This backup contains 2 items.', undefined, { timeout: 30000 })
+    await user.click(screen.getByRole('button', { name: 'Replace library' }))
+
+    // The tab is hidden mid-commit: the content, including the dialog, unmounts.
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Import backup' })).not.toBeInTheDocument())
+    release()
+    await waitFor(async () => expect((await stored()).header.vaultId).toBe(vaultB.header.vaultId))
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    delete (document as unknown as Record<string, unknown>).hidden
+    delete (document as unknown as Record<string, unknown>).visibilityState
+    expect(await screen.findByText(NEW_TITLE, undefined, { timeout: 30000 })).toBeInTheDocument()
+    expect(screen.queryByText(OLD_TITLE)).not.toBeInTheDocument()
+  })
+})
+
+describe('export too large', () => {
+  it('refuses safely with a content-free, actionable message and no download', async () => {
+    const session: VaultSession = { header: vaultB.header, generation: 1, dataKey: vaultB.dataKey }
+    const records = []
+    for (let n = 1; n <= 1000; n++) {
+      const entry = note(session, `Heavy ${n}`, '"'.repeat(10000))
+      entry.id = `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
+      records.push(await encryptItem(session, entry))
+    }
+    const seeded = await replaceLibrary(session, { expectedGeneration: null, expectedRevision: null }, records)
+    expect(seeded.ok).toBe(true)
+    const before = await stored()
+    const create = vi.fn(() => 'blob:never')
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }))
+    const user = userEvent.setup()
+    render(<App />)
+    await unlock(user, BACKUP_PHRASE)
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(screen.getByRole('button', { name: 'Export backup' }))
+    const alert = await screen.findByRole('alert', undefined, { timeout: 30000 })
+    expect(alert).toHaveTextContent(/too large/i)
+    expect(alert).toHaveTextContent(/delete or shorten/i)
+    expect(alert.textContent).not.toContain('Heavy')
+    expect(create).not.toHaveBeenCalled()
+    expect(await stored()).toEqual(before)
   })
 })

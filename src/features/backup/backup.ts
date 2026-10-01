@@ -130,7 +130,7 @@ export async function writeBackup(
   }
   const blob = new Blob([JSON.stringify(file)], { type: 'application/octet-stream' })
   if (blob.size > APP_LIMITS.importMaxBytes) {
-    return failure('too-large', 'This library is too large to export as one backup file.')
+    return failure('too-large', 'This library is too large to export as one backup file. Delete or shorten some notes and try again.')
   }
   return { ok: true, blob, filename: backupFilename(now) }
 }

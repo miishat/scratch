@@ -130,7 +130,7 @@ export function RemoteChangePanel({
   session: VaultSession | null
   exportRecoveryBackup?: ExportRecoveryBackup
 }) {
-  const { readDraft, discardDraftAndReload } = useVault()
+  const { readDraft, discardDraftAndReload, keepEditing } = useVault()
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -151,10 +151,11 @@ export function RemoteChangePanel({
 
   return <main className="support-screen vault-screen">
     <h1>This library changed in another tab</h1>
-    <p>Your unsaved note has not been saved. Export a backup that includes it, or discard the note and unlock again.</p>
+    <p>Your unsaved note has not been saved. Export a backup that includes it, keep editing it, or discard the note and unlock again.</p>
     {status && <p role="status">{status}</p>}
     <div className="dialog-actions">
       {exportRecoveryBackup && <button className="primary-button" type="button" disabled={busy} onClick={() => void exportBackup()}>Export backup</button>}
+      <button type="button" disabled={busy} onClick={keepEditing}>Keep editing</button>
       <button type="button" disabled={busy} onClick={discardDraftAndReload}>Discard draft and reload</button>
     </div>
   </main>

@@ -79,9 +79,11 @@ export function BackupDialog({ replace, onClose, onImported }: Props) {
     }
     setError(null)
     setStage('replacing')
+    // The commit and the install run to completion even if this dialog unmounts
+    // (for example the tab was concealed): the library is already replaced by then.
     const result = await commitImport(prepared, base)
-    if (!alive.current) return
     if (!result.ok) {
+      if (!alive.current) return
       setError(result.message)
       if (result.code === 'conflict' || result.code === 'vault-changed') {
         // The library moved on after it was reviewed: start over with a new review.
@@ -93,7 +95,7 @@ export function BackupDialog({ replace, onClose, onImported }: Props) {
       }
       return
     }
-    installSession(result.session)
+    installSession(result.session, replace ? replace.session : null)
     onImported()
   }
 

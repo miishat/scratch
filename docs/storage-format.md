@@ -112,8 +112,11 @@ A tab whose library was replaced elsewhere while it holds an unsaved note uses
 the recovery export instead. It applies the note (as a new note, or as an edit
 of the note it came from) to a copy of that tab's old in-memory library,
 validates the result, encrypts every record with that tab's old key, and writes
-it under the old header, without reading or writing the database. An invalid or
-empty note is refused and stays with the editor.
+it under the old header, without reading or writing the database. A note whose
+original note no longer exists in that copy, or whose collection no longer
+exists, is filed as a new note at the top level. An invalid or empty note is
+refused, and the recovery panel offers Keep editing so the editor is reachable
+again; the note is never dropped silently.
 
 ### Import
 

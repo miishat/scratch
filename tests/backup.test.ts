@@ -221,9 +221,21 @@ describe('export privacy', () => {
   it('contains no fixture token, title, body, theme, or query', async () => {
     const { session } = await seedLibraryA()
     const text = await textOf(asFile(await exportBackup(session)))
-    for (const needle of [fixtureSecretBody, ORDINARY_TITLE, 'Ordinary body', 'Service credential', 'Work area', 'Deep shelf', 'Loose root note', 'sage', 'clay', 'theme', 'query', PHRASE]) {
+    // Only long, distinctive needles are searched for in the base64 text; short
+    // words could appear there by chance.
+    for (const needle of [fixtureSecretBody, ORDINARY_TITLE, 'Ordinary body line one', 'Service credential', 'Work area', 'Deep shelf', 'Loose root note', PHRASE]) {
       expect(text).not.toContain(needle)
     }
+    // Key names are checked on the parsed structure, never as substrings.
+    const forbidden = new Set(['theme', 'query', 'title', 'body', 'color', 'isSecret', 'passphrase'])
+    const walk = (value: unknown): void => {
+      if (typeof value !== 'object' || value === null) return
+      for (const [key, child] of Object.entries(value)) {
+        expect(forbidden.has(key)).toBe(false)
+        walk(child)
+      }
+    }
+    walk(JSON.parse(text))
   })
 })
 
@@ -473,6 +485,32 @@ describe('maximum valid backup', () => {
     await freshDatabase()
     const restored = await prepareImport(again, OTHER_PHRASE)
     expect(restored.ok && restored.prepared.itemCount).toBe(1000)
+  })
+})
+
+describe('escape-heavy maximum library', () => {
+  it('refuses a too-large export safely: no file, no database change, content-free advice', async () => {
+    const session = sessionOf(vaultB)
+    const records: StoredItem[] = []
+    // Quotes escape to two bytes each in JSON, then base64 twice: over 32 MiB at 1,000 notes.
+    for (let n = 1; n <= 1000; n++) {
+      records.push(await encryptItem(session, item(session, { id: uid(n), kind: 'note', title: `Heavy ${n}`, body: '"'.repeat(10000) })))
+    }
+    const seeded = await replaceLibrary(session, { expectedGeneration: null, expectedRevision: null }, records)
+    expect(seeded.ok).toBe(true)
+    const before = await storedState()
+
+    const written = await writeBackup(session, records)
+    expect(written.ok === false && written.code).toBe('too-large')
+
+    const result = await exportBackup(session)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('too-large')
+      expect(result.message).toMatch(/delete or shorten some notes/i)
+      expect(result.message).not.toContain('Heavy')
+    }
+    expect(await storedState()).toEqual(before)
   })
 })
 
