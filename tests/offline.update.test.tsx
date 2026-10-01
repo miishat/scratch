@@ -177,6 +177,8 @@ describe('UpdateNotice', () => {
     const page = document.querySelector('[data-update-live]')
     expect(page).not.toBeNull()
     expect(page).toHaveAttribute('aria-live', 'polite')
+    // Atomic, so a status that changes in place is read whole, not as a fragment.
+    expect(page).toHaveAttribute('aria-atomic', 'true')
     expect(page).toBeEmptyDOMElement()
     act(() => callbacks().onNeedRefresh())
     await waitFor(() => expect(page).toHaveTextContent('A new version of Scratch is ready.'))
@@ -189,6 +191,8 @@ describe('UpdateNotice', () => {
     const dialogRegion = () => screen.getByRole('dialog', { name: 'New note' }).querySelector('[data-update-live]')
     await waitFor(() => expect(dialogRegion()).not.toBeNull())
     const inside = dialogRegion()
+    expect(inside).toHaveAttribute('aria-live', 'polite')
+    expect(inside).toHaveAttribute('aria-atomic', 'true')
     expect(inside).toBeEmptyDOMElement()
     act(() => next.callbacks().onNeedRefresh())
     await waitFor(() => expect(inside).toHaveTextContent('A new version of Scratch is ready.'))

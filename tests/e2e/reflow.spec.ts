@@ -33,6 +33,10 @@ async function expectBottomReachable(page: Page, name: string, where: string) {
   expect(box && box.y >= 0 && box.y + box.height <= height + 0.5, `${where}: ${name} is inside the viewport`).toBe(true)
 }
 
+// 40 stacked-accent letters, five family emoji (ZWJ sequences), and 20 ring-accented
+// capitals with no space anywhere: 65 grapheme clusters, 385 bytes, nothing to wrap at.
+const LONG_UNICODE_TITLE = 'ẹ́'.repeat(40) + '👨‍👩‍👧‍👦'.repeat(5) + 'Å'.repeat(20)
+
 async function walk(page: Page, label: string) {
   await expectFits(page, `${label} setup`)
   await createLibrary(page)
@@ -43,6 +47,13 @@ async function walk(page: Page, label: string) {
   await addNote(page, { body: SYNTHETIC_TOKEN, title: 'OpenAI key for the long title wrapping check', secret: true })
   await addNote(page, { body: 'A note whose first line is long enough to need wrapping on a small screen\nsecond line' })
   await expectFits(page, `${label} collection`)
+
+  await addNote(page, { body: 'Unicode title body', title: LONG_UNICODE_TITLE })
+  await expectFits(page, `${label} collection with a long unbroken Unicode title`)
+  await page.locator('a.tile-link').filter({ hasText: '👨' }).click()
+  await expectFits(page, `${label} reader with a long unbroken Unicode title`)
+  await page.getByRole('button', { name: 'Close' }).first().click()
+  await expect(page.getByRole('dialog')).toBeHidden()
 
   await page.getByRole('link', { name: 'OpenAI key for the long title wrapping check, secret note' }).click()
   await expectFits(page, `${label} reader`)
@@ -91,7 +102,11 @@ for (const size of [
   test.describe(size.label, () => {
     test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale })
 
-    test('no horizontal scrolling on any screen and every core action stays reachable', async ({ page }) => {
+    // The slow walks run once per engine pair, on the desktop projects: the phone
+    // projects already fix the viewport at 360 px, and each walk repeats several 600,000
+    // iteration key derivations.
+    test('no horizontal scrolling on any screen and every core action stays reachable', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name.startsWith('mobile'), 'Walked on the desktop project of the same engine.')
       test.slow()
       await walk(page, size.label)
     })

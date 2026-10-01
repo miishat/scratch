@@ -75,6 +75,38 @@ describe.each(Object.entries(themes))('%s theme contrast', (_name, theme) => {
   })
 })
 
+// The tile hover state in global.css blends the tile tint with the page color
+// (color-mix in sRGB, 96% tint). Recomputed here with the same channel arithmetic.
+function mix(tint: string, other: string, tintShare: number): string {
+  const channel = (index: number) => Math.round(parseInt(tint.slice(index, index + 2), 16) * tintShare + parseInt(other.slice(index, index + 2), 16) * (1 - tintShare))
+  return '#' + [1, 3, 5].map((index) => channel(index).toString(16).padStart(2, '0')).join('')
+}
+
+describe('hover states', () => {
+  it('global.css still blends tiles 96/4 with the page color, which is what the cases below compute', () => {
+    expect(globalCss).toMatch(/\.tile-grid > \*:hover\s*\{[^}]*color-mix\(in srgb, var\(--tile-surface, var\(--surface\)\) 96%, var\(--page-bg\)\)/)
+  })
+
+  describe.each(Object.entries(themes))('%s theme', (_name, theme) => {
+    it.each(['surface', 'sage', 'clay', 'ochre', 'slate'] as const)('text, muted text, and the focus-colored border on a hovered %s tile keep their ratios', (tint) => {
+      const hovered = mix(theme[tint], theme['page-bg'], 0.96)
+      expect(ratio(theme.text, hovered)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(theme.muted, hovered)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(theme.focus, hovered)).toBeGreaterThanOrEqual(3)
+    })
+
+    it('a hovered ordinary button (page color fill, text color border) keeps text and border ratios', () => {
+      expect(ratio(theme.text, theme['page-bg'])).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(theme.text, theme.surface)).toBeGreaterThanOrEqual(3)
+    })
+
+    it('a hovered primary button keeps its text ratio and its text-colored border is 3:1 against the page', () => {
+      expect(ratio(theme['action-text'], theme.action)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(theme.text, theme['page-bg'])).toBeGreaterThanOrEqual(3)
+    })
+  })
+})
+
 describe('decorative borders', () => {
   it('no input, textarea, or button rule relies on the decorative border token for its boundary', () => {
     const offenders: string[] = []
@@ -87,11 +119,27 @@ describe('decorative borders', () => {
     expect(offenders).toEqual([])
   })
 
-  it('records the measured decorative ratio so a change is visible in review', () => {
-    const light = ratio(themes.light.border, themes.light['page-bg'])
-    // Documented thin spot: the neutral card border is about 1.3:1 on the page.
-    // It is decorative; cards are identified by their text and links, not by this line.
-    expect(light).toBeGreaterThan(1)
-    expect(light).toBeLessThan(3)
+  // Every use of the decorative token is listed with the reason it may be faint. A new
+  // use fails here until someone decides it is decoration and adds it. The tile and the
+  // destination row are identified by their link or native radio and text, never by
+  // this line; the destination row's selected state is the 2 px text-colored border.
+  const ALLOWED = ['.app-header', '.add-menu', '.empty-state', '.tile-grid > .tile', '.crumb-list', '.conflict-version', '.destination', '.update-notice', '.update-status']
+
+  it('only the documented container and divider rules use the decorative border token', () => {
+    const used = [...globalCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter((rule) => /var\(--border\)/.test(rule[2]))
+      .map((rule) => rule[1].trim().replace(/\s+/g, ' '))
+    expect(used).toEqual(ALLOWED)
+  })
+
+  it.each(Object.entries(themes))('%s: the decorative border stays visibly fainter than a control boundary, and its ratio is on record', (_name, theme) => {
+    const decorative = ratio(theme.border, theme['page-bg'])
+    const control = ratio(theme.focus, theme['page-bg'])
+    // Measured: light about 1.3:1, dark about 1.5:1. If a palette change ever made the
+    // faint line as strong as a control boundary the distinction would be gone.
+    expect(decorative).toBeGreaterThan(1)
+    expect(decorative).toBeLessThan(3)
+    expect(control).toBeGreaterThanOrEqual(3)
+    expect(control).toBeGreaterThan(decorative * 2)
   })
 })

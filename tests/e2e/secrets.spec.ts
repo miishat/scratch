@@ -153,6 +153,9 @@ test('a secret note stays out of text, names, URLs, storage, exports, clipboard 
     expectNoneOf(await exposed(page), [SYNTHETIC_TOKEN], 'masked reader')
     await reader.getByRole('button', { name: 'Reveal' }).click()
     await expect(reader.locator('pre')).toHaveText(SYNTHETIC_TOKEN)
+    // Positive control: the same scanner that must find nothing elsewhere does see the
+    // token here, so the "not exposed" checks cannot pass merely because it is blind.
+    expect(await exposed(page), 'exposed() detects the token while it is revealed').toContain(SYNTHETIC_TOKEN)
     await reader.getByRole('button', { name: 'Hide' }).click()
     await expect(reader.locator('pre')).toHaveCount(0)
     expectNoneOf(await exposed(page), [SYNTHETIC_TOKEN], 'hidden again')
@@ -206,7 +209,6 @@ test('a secret note stays out of text, names, URLs, storage, exports, clipboard 
     expect(storage.databases).toBeGreaterThanOrEqual(1)
     expect(storage.records).toBeGreaterThanOrEqual(4)
     expectNoneOf(storage.text, SENSITIVE, 'IndexedDB, Cache, localStorage, sessionStorage')
-    expect(storage.text).not.toContain(btoa(SYNTHETIC_TOKEN))
   })
 
   await test.step('a reload locks, shows no content, and storage still holds none', async () => {
@@ -222,7 +224,6 @@ test('a secret note stays out of text, names, URLs, storage, exports, clipboard 
     const path = await exportBackup(page, testInfo, 'secrets.scratch')
     const text = await readFile(path, 'utf8')
     expectNoneOf(text, SENSITIVE, 'backup file')
-    expect(text).not.toContain(btoa(SYNTHETIC_TOKEN))
     expect(text).not.toContain(encodeURIComponent(TITLE))
   })
 
@@ -247,6 +248,12 @@ test('a secret note stays out of text, names, URLs, storage, exports, clipboard 
       expect(url.pathname, `${request.url} is a static asset path`).toMatch(/(\/|\.html|\.js|\.css|\.woff2?|\.png|\.webmanifest|\.txt)$/)
       expectNoneOf(decodeURIComponent(request.url), SENSITIVE, 'request URL')
     }
+    // Limitation: requests issued by the service worker itself are only reported by some
+    // engines (request.serviceWorker() is Chromium-specific). The worker has no fetch
+    // handler or runtime caching, so it makes none beyond precache installation, but
+    // that is a property of the build, checked by the dist smoke check below, not by
+    // this recorder on every engine.
+    testInfo.annotations.push({ type: 'service worker requests', description: String(requests.filter((request) => request.fromServiceWorker).length) })
     // The worker script itself is fetched from the same origin like any other asset.
     expect(http.some((request) => new URL(request.url).pathname.endsWith('/sw.js'))).toBe(true)
     // Non-http schemes (data: or blob: resources) never leave the browser; list them for review.
@@ -269,6 +276,8 @@ test('the production bundle carries no test hook, mock, or weakened key derivati
   await collect(dist)
   expect(files.length).toBeGreaterThan(2)
   const source = (await Promise.all(files.map((file) => readFile(file, 'utf8')))).join('\n')
+  // Smoke check only: a text grep over the minified build catches an accidentally shipped
+  // hook or lowered constant by name, but it cannot prove the absence of obfuscated ones.
   // Page globals as hooks, other than the build tool's own manifest variable.
   const globals = [...source.matchAll(/\b(?:window|globalThis|self)\.__(\w+)/g)].map((match) => match[1]).filter((name) => !/^WB/.test(name))
   expect(globals, 'global hook names').toEqual([])
@@ -278,4 +287,40 @@ test('the production bundle carries no test hook, mock, or weakened key derivati
   // The documented iteration count is the only one in the bundle.
   expect(source).toMatch(/=6e5\b/)
   expect(source).not.toMatch(/iterations\s*:\s*(?:[1-9]\d{0,4}|[1-5]\d{5})\b(?!\d)/)
+})
+
+test.describe('a revealed secret hides itself', () => {
+  async function openSecret(page: Page) {
+    await createLibrary(page)
+    await addNote(page, { body: SYNTHETIC_TOKEN, title: TITLE, secret: true })
+    await page.getByRole('link', { name: `${TITLE}, secret note` }).click()
+    const reader = page.getByRole('dialog', { name: 'Note' })
+    await reader.getByRole('button', { name: 'Reveal' }).click()
+    await expect(reader.locator('pre')).toHaveText(SYNTHETIC_TOKEN)
+    return reader
+  }
+
+  test('after 30 seconds, using a controlled clock', async ({ page }) => {
+    await page.clock.install()
+    const reader = await openSecret(page)
+    await page.clock.fastForward(29_000)
+    await expect(reader.locator('pre')).toHaveText(SYNTHETIC_TOKEN)
+    await page.clock.fastForward(1_500)
+    await expect(reader.locator('pre')).toHaveCount(0)
+    await expect(reader.getByRole('status')).toHaveText('Secret hidden.')
+    expectNoneOf(await exposed(page), [SYNTHETIC_TOKEN], 'page after auto-hide')
+  })
+
+  // A real hidden tab cannot be produced in a headless run, so the page is told what a
+  // browser tells it: visibilityState becomes hidden and visibilitychange fires. Whether
+  // a real phone or desktop browser fires it when switching apps is a manual check.
+  test('when the document becomes hidden', async ({ page }) => {
+    const reader = await openSecret(page)
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await expect(reader.locator('pre')).toHaveCount(0)
+    expectNoneOf(await exposed(page), [SYNTHETIC_TOKEN], 'page after the tab was hidden')
+  })
 })

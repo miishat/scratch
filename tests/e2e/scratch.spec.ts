@@ -117,13 +117,29 @@ test('a library lives through creation, organization, search, reload, transfer, 
       await expect(page.getByRole('list', { name: 'Search results' })).toHaveCount(0)
     })
 
-    await test.step('the theme follows the system and survives a reload', async () => {
+    await test.step('the theme follows the system colour scheme while running', async () => {
       await page.emulateMedia({ colorScheme: 'dark' })
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
       await page.emulateMedia({ colorScheme: 'light' })
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
       await page.emulateMedia({ colorScheme: 'dark' })
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    })
+
+    // The app has no Settings control for the theme yet, but ThemeProvider persists an
+    // explicit preference under this key and the pre-paint script in index.html reads
+    // it. The key is seeded directly; what is asserted is that an explicit Dark choice
+    // beats the system scheme (light) across a reload, before and after unlock.
+    await test.step('an explicit Dark preference survives a reload while the system is light', async () => {
+      await page.evaluate(() => localStorage.setItem('scratch-theme', 'dark'))
+      await page.emulateMedia({ colorScheme: 'light' })
+      await page.reload()
+      await expect(page.getByRole('heading', { name: 'Unlock Scratch' })).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+      await unlock(page)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+      await page.evaluate(() => localStorage.removeItem('scratch-theme'))
+      await page.emulateMedia({ colorScheme: 'dark' })
     })
 
     await test.step('a reload locks the library and unlocking brings back every item', async () => {
@@ -161,6 +177,11 @@ test('a library lives through creation, organization, search, reload, transfer, 
         await expect(other.getByRole('link', { name: 'API Tokens, 2 items' })).toBeVisible()
         await other.getByRole('link', { name: 'API Tokens, 2 items' }).click()
         await expect(other.getByRole('link', { name: 'OpenAI, secret note' })).toBeVisible()
+        // The secret itself, not just its title, made the trip: reveal it and compare.
+        await other.getByRole('link', { name: 'OpenAI, secret note' }).click()
+        await other.getByRole('dialog', { name: 'Note' }).getByRole('button', { name: 'Reveal' }).click()
+        await expect(other.getByRole('dialog', { name: 'Note' }).locator('pre')).toHaveText(SYNTHETIC_TOKEN)
+        await other.getByRole('dialog', { name: 'Note' }).getByRole('button', { name: 'Close' }).first().click()
         await other.getByRole('link', { name: 'Work, 1 item' }).click()
         await other.getByRole('link', { name: 'Buy oat milk', exact: true }).click()
         await expect(other.getByRole('dialog', { name: 'Note' })).toContainText('and sourdough instead of bread')
@@ -292,7 +313,7 @@ test.describe('dirty lifecycle', () => {
     await expect(page.getByRole('link', { name: 'Draft that survives an idle lock', exact: true })).toBeVisible()
   })
 
-  test('a failed save keeps the draft on screen with the reason and nothing is written', async ({ page }) => {
+  test('a failed save keeps the draft on screen with the reason, and nothing was written', async ({ page }) => {
     await createLibrary(page)
     await openAddMenu(page, 'Add note')
     await page.getByRole('textbox', { name: 'Note body' }).fill('Draft that cannot be saved yet')
@@ -302,10 +323,18 @@ test.describe('dirty lifecycle', () => {
       IDBObjectStore.prototype.add = fail
     })
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByRole('alert')).toBeVisible()
-    await expect(page.getByRole('dialog', { name: 'New note' })).toBeVisible()
+    // The reason is the storage-full message, shown in the editor's own alert.
+    await expect(page.getByRole('dialog', { name: 'New note' }).getByRole('alert')).toHaveText('Not enough storage space to save. Free some space and try again.')
     await expect(page.getByRole('textbox', { name: 'Note body' })).toHaveValue('Draft that cannot be saved yet')
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+    // Nothing reached storage: after a reload and unlock the library holds no such note.
+    // The dirty draft makes the browser ask before leaving; accept it.
+    page.on('dialog', (dialog) => void dialog.accept())
+    await page.reload()
+    await unlock(page)
+    await expect(page.getByRole('heading', { name: 'A place for the little things.' })).toBeVisible()
+    await expect(page.locator('body')).not.toContainText('Draft that cannot be saved yet')
+    await expect(page.locator('.note-tile')).toHaveCount(0)
   })
 
   test('a modal editor keeps keyboard focus inside, so page controls behind it are unreachable', async ({ page }) => {

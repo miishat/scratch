@@ -31,6 +31,11 @@ function launchable(name: string, path: string): boolean {
   }
 }
 const FIREFOX_RUNS = launchable('firefox', firefox.executablePath())
+// A release gate can insist that Firefox really ran: with REQUIRE_FIREFOX=1 an
+// unlaunchable Firefox fails the whole run instead of being left out with a warning.
+if (process.env.REQUIRE_FIREFOX === '1' && !FIREFOX_RUNS) {
+  throw new Error('REQUIRE_FIREFOX=1 is set but Firefox cannot start on this machine, so the Firefox project cannot run.')
+}
 
 export default defineConfig({
   testDir: './tests/e2e',
