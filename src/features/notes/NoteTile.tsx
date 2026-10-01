@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { NavLink } from '../../components/NavLink'
 import { DotsIcon, LockIcon, NoteIcon } from '../../components/TileIcons'
-import { displayTitle, truncateGraphemes } from '../library/display'
+import type { CopyResult } from '../clipboard/copy'
+import { displayTitle, pathLabel, truncateGraphemes } from '../library/display'
 import type { LibraryItem } from '../library/types'
 
 export const SECRET_MASK = '•'.repeat(8)
@@ -23,24 +25,46 @@ export function notePreview(note: LibraryItem): string {
   return truncateGraphemes(joined, PREVIEW_GRAPHEMES)
 }
 
-type Props = { note: LibraryItem, onCopy?: (note: LibraryItem) => void, onMenu?: (item: LibraryItem) => void }
+type Props = {
+  note: LibraryItem
+  // Resolves once the copy attempt settles. Only 'denied' and 'unavailable'
+  // put the tile into its manual-copy state.
+  onCopy?: (note: LibraryItem) => Promise<CopyResult | void> | void
+  onMenu?: (item: LibraryItem) => void
+  // Titles of the containing collections, shown on search results.
+  path?: string[]
+}
 
 // Open, Copy, and menu are three separate controls so activating one never
 // triggers another.
-export function NoteTile({ note, onCopy, onMenu }: Props) {
+export function NoteTile({ note, onCopy, onMenu, path }: Props) {
+  const [copyFailed, setCopyFailed] = useState(false)
   const name = noteName(note)
   const preview = notePreview(note)
-  const label = note.isSecret && note.title !== null ? `${name}, secret note` : name
+  const base = note.isSecret && note.title !== null ? `${name}, secret note` : name
+  const label = path ? `${base}, ${pathLabel(path).toLowerCase()}` : base
+  const noteRoute = { collectionId: note.parentId, noteId: note.id }
+
+  async function copy(): Promise<void> {
+    setCopyFailed(false)
+    const result = await onCopy?.(note)
+    if (result === 'denied' || result === 'unavailable') setCopyFailed(true)
+  }
   return <li className="tile note-tile" data-secret={note.isSecret || undefined}>
-    <NavLink className="tile-link" route={{ collectionId: note.parentId, noteId: note.id }} aria-label={label}>
+    <NavLink className="tile-link" route={noteRoute} aria-label={label}>
       {note.isSecret ? <LockIcon /> : <NoteIcon />}
       <span className="tile-title">{name}</span>
+      {path && <span className="tile-path">{pathLabel(path)}</span>}
       {note.isSecret
         ? <span className="tile-secret" aria-hidden="true">{SECRET_MASK}</span>
         : preview && <span className="tile-preview">{preview}</span>}
     </NavLink>
     {(onCopy || onMenu) && <div className="tile-actions">
-      {onCopy && <button type="button" aria-label={`Copy ${name}`} onClick={() => onCopy(note)}>Copy</button>}
+      {onCopy && <button type="button" aria-label={`Copy ${name}`} onClick={() => void copy()}>Copy</button>}
+      {copyFailed && <div className="tile-copy-failed" role="status">
+        <span>Could not copy.</span>
+        <NavLink route={noteRoute}>{note.isSecret ? 'Reveal to copy manually' : 'Select text'}</NavLink>
+      </div>}
       {onMenu && <button className="icon-button" type="button" aria-label={`More actions for ${name}`} onClick={() => onMenu(note)}><DotsIcon /></button>}
     </div>}
   </li>

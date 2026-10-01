@@ -5,6 +5,7 @@ import { TileGrid } from '../../components/TileGrid'
 import { sortItems } from '../library/display'
 import { DotsIcon } from '../../components/TileIcons'
 import { collectionPath } from '../library/hierarchy'
+import type { CopyResult } from '../clipboard/copy'
 import type { ItemId, LibraryItem } from '../library/types'
 import { NoteTile } from '../notes/NoteTile'
 import { Breadcrumbs } from './Breadcrumbs'
@@ -16,7 +17,7 @@ export interface CollectionViewProps {
   // collection being viewed, or null at the top level.
   onAddNote?: (parentId: ItemId | null) => void
   onAddCollection?: (parentId: ItemId | null) => void
-  onCopyNote?: (note: LibraryItem) => void
+  onCopyNote?: (note: LibraryItem) => Promise<CopyResult | void> | void
   onItemMenu?: (item: LibraryItem) => void
   // Editor for an open note route; the grid is shown when it is absent.
   renderNote?: (note: LibraryItem) => ReactNode

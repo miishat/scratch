@@ -38,6 +38,9 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .tile-meta, .tile-preview, .tile-secret { color: var(--muted); font-size: 14px; line-height: 1.4; max-width: 100%; overflow-wrap: anywhere; }
 .tile-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .tile-secret { letter-spacing: 0.15em; }
+.tile-path { color: var(--muted); font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.tile-copy-failed { max-width: 150px; display: grid; gap: 4px; font-size: 14px; line-height: 1.4; text-align: right; color: var(--muted); overflow-wrap: anywhere; }
+.tile-copy-failed a { color: var(--text); }
 .tile-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 12px 12px 12px 0; }
 .route-notice { margin: 0 0 16px; color: var(--text); }
 .route-notice:not(:empty) { border-left: 4px solid var(--focus); padding: 4px 0 4px 12px; }

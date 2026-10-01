@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { copyNote, type CopyResult } from '../features/clipboard/copy'
+import { SearchResults } from '../features/search/SearchResults'
+import { useSearch } from '../features/search/useSearch'
 import { AppHeader } from '../components/AppHeader'
 import { EmptyState } from '../components/EmptyState'
 import { ToastRegion } from '../components/ToastRegion'
@@ -24,11 +27,23 @@ import { formatRoute } from './navigation'
 import { NavigationProvider } from './NavigationProvider'
 import { useNavigation } from './useNavigation'
 
-type ShellProps = { children?: ReactNode, onAddNote?: () => void, onAddCollection?: () => void, onSettings?: () => void, onHome?: () => void, toast?: string }
+type ShellProps = {
+  children?: ReactNode
+  onAddNote?: () => void
+  onAddCollection?: () => void
+  onSettings?: () => void
+  onHome?: () => void
+  toast?: string
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  // Count-only announcement for the search results; never contains note text.
+  searchStatus?: string
+}
 
-export function AppShell({ children, onAddNote, onAddCollection, onSettings, onHome, toast }: ShellProps) {
+export function AppShell({ children, onAddNote, onAddCollection, onSettings, onHome, toast, searchValue, onSearchChange, searchStatus }: ShellProps) {
   return <>
-    <AppHeader onAddNote={onAddNote} onAddCollection={onAddCollection} onSettings={onSettings} onHome={onHome} />
+    <AppHeader onAddNote={onAddNote} onAddCollection={onAddCollection} onSettings={onSettings} onHome={onHome} searchValue={searchValue} onSearchChange={onSearchChange} />
+    <p className="visually-hidden" role="status">{searchStatus}</p>
     <main className="app-content">{children ?? <EmptyState onAddNote={onAddNote} onAddCollection={onAddCollection} />}</main>
     <ToastRegion message={toast} />
   </>
@@ -95,10 +110,12 @@ function UnlockedShell(props: AppProps) {
   const sequence = useRef(0)
   const pendingFocus = useRef<{ selector: string, expires: number } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const alive = useRef(true)
   const { holdRefresh } = library
   const { hasDirtyDraft, recoveredDraft, clearRecoveredDraft } = vault
   const { openNote } = navigation
   const items = library.snapshot?.items
+  const search = useSearch(items, routeKey)
 
   // A dirty editor must not have its library replaced underneath it.
   useEffect(() => {
@@ -106,7 +123,13 @@ function UnlockedShell(props: AppProps) {
     return holdRefresh()
   }, [hasDirtyDraft, holdRefresh])
 
-  useEffect(() => () => clearTimeout(toastTimer.current), [])
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      clearTimeout(toastTimer.current)
+    }
+  }, [])
 
   // A new-note editor belongs to the route it opened on; Back or a link closes
   // it when clean. A dirty one is guarded, so only a forced fallback gets here.
@@ -150,6 +173,7 @@ function UnlockedShell(props: AppProps) {
   })
 
   function announce(message: string) {
+    if (!alive.current) return
     clearTimeout(toastTimer.current)
     setToast(message)
     toastTimer.current = setTimeout(() => setToast(''), TOAST_MS)
@@ -166,6 +190,15 @@ function UnlockedShell(props: AppProps) {
       : '.header-add'
     pendingFocus.current = { selector, expires: Date.now() + 1000 }
   }
+
+  // A copy settles after the user action; Copied is announced only on success
+  // and never includes the text. A failure is shown by the tile that asked.
+  async function copy(note: LibraryItem): Promise<CopyResult> {
+    const result = await copyNote(note.body ?? '')
+    if (result === 'copied') announce('Copied')
+    return result
+  }
+  const onCopyNote = props.onCopyNote ?? copy
 
   const clearRecovery = useCallback(() => setRecovery(null), [])
   const organize = useOrganize(announce)
@@ -190,7 +223,16 @@ function UnlockedShell(props: AppProps) {
         onSettings={() => setDialog('settings')}
         onHome={() => void navigation.openCollection(null)}
         toast={toast}
-      >{children ?? <LibraryContent {...props} onAddNote={addNote} onAddCollection={addCollection} onItemMenu={props.onItemMenu ?? organize.openMenu} renderNote={renderNote} />}</AppShell>
+        searchValue={search.query}
+        onSearchChange={search.setQuery}
+        searchStatus={search.announcement}
+      >
+        {/* Hidden, not unmounted, so an open editor keeps its draft while results show. */}
+        <div hidden={search.results !== null} inert={search.results !== null}>
+          {children ?? <LibraryContent {...props} onAddNote={addNote} onAddCollection={addCollection} onCopyNote={onCopyNote} onItemMenu={props.onItemMenu ?? organize.openMenu} renderNote={renderNote} />}
+        </div>
+        {search.results && items && <SearchResults results={search.results} items={items} onCopyNote={onCopyNote} />}
+      </AppShell>
       {composer && <NoteEditor
         key={composer.key}
         parentId={composer.parentId}

@@ -52,3 +52,8 @@ export function compareItems(a: LibraryItem, b: LibraryItem): number {
 export function sortItems(items: LibraryItem[]): LibraryItem[] {
   return [...items].sort(compareItems)
 }
+
+// Where an item lives, for search results: its collection titles from the top.
+export function pathLabel(path: string[]): string {
+  return `In ${path.length ? path.join(' / ') : 'Scratch'}`
+}
