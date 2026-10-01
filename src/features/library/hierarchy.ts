@@ -1,5 +1,6 @@
 import type { ItemId, LibraryItem } from './types'
 import { APP_LIMITS } from './types'
+import { sortItems } from './display'
 
 // Tree operations over a decrypted item list. Depth is 0-based: a root
 // collection (parentId null) sits at depth 0, and at most eight levels are
@@ -131,4 +132,70 @@ export function collectionPath(items: LibraryItem[], id: ItemId | null): Library
     cursor = node.parentId
   }
   return path
+}
+
+// Levels of collections in the subtree rooted at id, counting the root itself:
+// a collection with no sub-collections has height 1. Cycle-guarded.
+export function subtreeHeight(items: LibraryItem[], id: ItemId): number {
+  const childCollections = new Map<ItemId, ItemId[]>()
+  for (const item of items) {
+    if (item.kind !== 'collection' || item.parentId === null) continue
+    const list = childCollections.get(item.parentId) ?? []
+    list.push(item.id)
+    childCollections.set(item.parentId, list)
+  }
+  let height = 1
+  const visited = new Set<ItemId>([id])
+  const stack: Array<[ItemId, number]> = [[id, 1]]
+  while (stack.length > 0) {
+    const [current, level] = stack.pop()!
+    height = Math.max(height, level)
+    for (const child of childCollections.get(current) ?? []) {
+      if (visited.has(child)) continue
+      visited.add(child)
+      stack.push([child, level + 1])
+    }
+  }
+  return height
+}
+
+export interface MoveDestination {
+  // Null is the top level, Scratch.
+  id: ItemId | null
+  // Titles from the top level down; empty for Scratch itself.
+  path: string[]
+}
+
+// Where the item may be moved: Scratch plus every collection that is not the
+// item or one of its descendants and that keeps a moved collection's whole
+// subtree within the depth limit. The repository enforces the same rules, so
+// this only decides what is worth offering. Depth-first, siblings in display order.
+export function moveDestinations(items: LibraryItem[], itemId: ItemId): MoveDestination[] {
+  const item = items.find((candidate) => candidate.id === itemId)
+  if (!item) return []
+  const excluded = new Set<ItemId>([itemId, ...descendantsOf(items, itemId)])
+  const height = item.kind === 'collection' ? subtreeHeight(items, itemId) : 0
+  const childrenOf = new Map<ItemId | null, LibraryItem[]>()
+  for (const candidate of items) {
+    if (candidate.kind !== 'collection') continue
+    const list = childrenOf.get(candidate.parentId) ?? []
+    list.push(candidate)
+    childrenOf.set(candidate.parentId, list)
+  }
+  const result: MoveDestination[] = [{ id: null, path: [] }]
+  const visited = new Set<ItemId>()
+  // `level` is the 1-based level of the collections being listed. A moved
+  // collection would sit one level below its destination and its deepest
+  // descendant `height` levels below that, which must stay within the limit.
+  function walk(parentId: ItemId | null, path: string[], level: number): void {
+    for (const collection of sortItems(childrenOf.get(parentId) ?? [])) {
+      if (excluded.has(collection.id) || visited.has(collection.id)) continue
+      visited.add(collection.id)
+      const here = [...path, collection.title ?? '']
+      if (height === 0 || level + height <= APP_LIMITS.maxCollectionDepth) result.push({ id: collection.id, path: here })
+      walk(collection.id, here, level + 1)
+    }
+  }
+  walk(null, [], 1)
+  return result
 }

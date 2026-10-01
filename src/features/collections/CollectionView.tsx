@@ -3,6 +3,7 @@ import { useNavigation } from '../../app/useNavigation'
 import { EmptyState } from '../../components/EmptyState'
 import { TileGrid } from '../../components/TileGrid'
 import { sortItems } from '../library/display'
+import { DotsIcon } from '../../components/TileIcons'
 import { collectionPath } from '../library/hierarchy'
 import type { ItemId, LibraryItem } from '../library/types'
 import { NoteTile } from '../notes/NoteTile'
@@ -62,7 +63,13 @@ export function CollectionView({ items, onAddNote, onAddCollection, onCopyNote, 
   return <div className="collection-view">
     <p className="route-notice" role="status">{message}</p>
     {current
-      ? <><Breadcrumbs path={path} /><h1 className="collection-heading">{current.title}</h1></>
+      ? <>
+        <Breadcrumbs path={path} />
+        <div className="collection-heading-row">
+          <h1 className="collection-heading">{current.title}</h1>
+          {onItemMenu && <button className="icon-button" type="button" aria-label={`More actions for ${current.title}`} onClick={() => onItemMenu(current)}><DotsIcon /></button>}
+        </div>
+      </>
       : children.length > 0 && <h1 className="visually-hidden">Scratch</h1>}
     {body}
   </div>

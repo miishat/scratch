@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { EmptyState } from '../components/EmptyState'
 import { ToastRegion } from '../components/ToastRegion'
+import { useOrganize } from '../features/collections/useOrganize'
 import { CollectionView, type CollectionViewProps } from '../features/collections/CollectionView'
 import { LibraryProvider, useLibrary } from '../features/library/LibraryProvider'
 import type { ItemId, LibraryItem } from '../features/library/types'
@@ -167,7 +168,9 @@ function UnlockedShell(props: AppProps) {
   }
 
   const clearRecovery = useCallback(() => setRecovery(null), [])
+  const organize = useOrganize(announce)
   const addNote = props.onAddNote ?? openComposer
+  const addCollection = props.onAddCollection ?? organize.openCreate
   const renderNote = props.renderNote ?? ((note: LibraryItem) => <NoteEditor
     key={note.id}
     parentId={note.parentId}
@@ -183,11 +186,11 @@ function UnlockedShell(props: AppProps) {
     <div hidden={hidden} inert={hidden}>
       <AppShell
         onAddNote={() => addNote(parentId)}
-        onAddCollection={props.onAddCollection && (() => props.onAddCollection?.(parentId))}
+        onAddCollection={() => addCollection(parentId)}
         onSettings={() => setDialog('settings')}
         onHome={() => void navigation.openCollection(null)}
         toast={toast}
-      >{children ?? <LibraryContent {...props} onAddNote={addNote} renderNote={renderNote} />}</AppShell>
+      >{children ?? <LibraryContent {...props} onAddNote={addNote} onAddCollection={addCollection} onItemMenu={props.onItemMenu ?? organize.openMenu} renderNote={renderNote} />}</AppShell>
       {composer && <NoteEditor
         key={composer.key}
         parentId={composer.parentId}
@@ -195,6 +198,7 @@ function UnlockedShell(props: AppProps) {
         onClose={(outcome) => finish(outcome, 'compose')}
       />}
     </div>
+    {!hidden && organize.dialogs}
     {!hidden && dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} onChangePassphrase={() => setDialog('passphrase')} />}
     {!hidden && dialog === 'passphrase' && !hasDirtyDraft && <ChangePassphraseDialog onClose={() => setDialog(null)} />}
     {lockError && <LockErrorPanel />}
