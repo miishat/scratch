@@ -16,8 +16,8 @@ All notable changes to Scratch are recorded here. The format follows
 - **Card styles.** Settings has a Notes picker (Index Card, Paper Sheet, Sticky
   Note, Quiet) and a Collections picker (Stacked, Classic, Folder Tab, Color
   Edge), each with a drawn preview. Choices apply instantly and are saved.
-- **Logo.** A pencil mark beside the wordmark in the header and a matching
-  favicon, both with no background block.
+- **Logo.** A note-page mark on a rounded square beside the wordmark, matching the installed app icon, and a matching
+  favicon. It follows the active color scheme.
 - **Edit button on notes.** Every note card has an Edit button that opens the
   note straight in the editor instead of the reader.
 - **More collection colors.** Rose, Lilac, Sky, and Stone join Sage, Clay,
@@ -61,11 +61,19 @@ All notable changes to Scratch are recorded here. The format follows
 - **Collection page.** The current collection's name is shown once, in the
   breadcrumb, with its actions button at the end of that row. The large heading
   is kept for screen readers and for narrow screens.
-- **Secret note hint.** In the note editor, the Secret note description sits
-  beside the checkbox in a lighter italic serif instead of below it.
 - **Dialogs.** The backdrop is blurred. The close button is smaller and aligned
   with the title. The collection actions menu says Edit instead of Edit
   collection.
+- **Longer sessions.** Scratch locks after thirty minutes without activity
+  (was ten) and after ten minutes with the tab hidden (was sixty seconds), so
+  switching apps on a phone no longer asks for the passphrase again. A reload
+  still starts locked.
+- **Password manager.** The setup and unlock forms include a hidden username so
+  the device can save and fill the passphrase.
+- **Import file picker.** The Choose File button follows the color scheme.
+- **Phone editor.** The note editor is a bottom sheet sized to its content
+  instead of a full-screen panel.
+- **Secret note hint.** Now sits under the checkbox, aligned with its label.
 - **Target sizes.** Card actions and the dialog close button are 32 px, above
   the 24 px WCAG 2.2 AA minimum. Primary controls stay at 44 px.
 

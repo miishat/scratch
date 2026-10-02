@@ -330,7 +330,7 @@ async function lockAutomatically() {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
   act(() => { document.dispatchEvent(new Event('visibilitychange')) })
-  act(() => { vi.advanceTimersByTime(61_000) })
+  act(() => { vi.advanceTimersByTime(601_000) })
   vi.useRealTimers()
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
   await screen.findByRole('heading', { name: 'Unlock Scratch' })
