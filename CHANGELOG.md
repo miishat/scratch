@@ -16,8 +16,9 @@ All notable changes to Scratch are recorded here. The format follows
 - **Card styles.** Settings has a Notes picker (Index Card, Paper Sheet, Sticky
   Note, Quiet) and a Collections picker (Stacked, Classic, Folder Tab, Color
   Edge), each with a drawn preview. Choices apply instantly and are saved.
-- **Logo.** A note-page mark on a rounded square beside the wordmark, matching the installed app icon, and a matching
-  favicon. It follows the active color scheme.
+- **Logo.** A pencil mark beside the wordmark in the header and a matching
+  favicon. The installed app icon, now also a cream pencil on the accent
+  color, matches it.
 - **Edit button on notes.** Every note card has an Edit button that opens the
   note straight in the editor instead of the reader.
 - **More collection colors.** Rose, Lilac, Sky, and Stone join Sage, Clay,
