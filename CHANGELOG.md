@@ -17,7 +17,8 @@ All notable changes to Scratch are recorded here. The format follows
   Note, Quiet) and a Collections picker (Stacked, Classic, Folder Tab, Color
   Edge), each with a drawn preview. Choices apply instantly and are saved.
 - **Logo.** A pencil mark beside the wordmark in the header and a matching
-  favicon. The installed app icon, now also a cream pencil on the accent
+  favicon (a light pencil with no background, readable on light and dark tab
+  bars). The installed app icon, now also a cream pencil on the accent
   color, matches it.
 - **Edit button on notes.** Every note card has an Edit button that opens the
   note straight in the editor instead of the reader.
