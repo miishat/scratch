@@ -39,8 +39,10 @@ All notable changes to Scratch are recorded here. The format follows
   rule, the preview, and a footer with Edit, Copy, and the actions menu.
 - **Collection cards.** Collection cards are stacked by default. The Paper
   Sheet fold takes its color from the active scheme's accent.
-- **Card buttons.** Buttons inside cards are smaller (32 px) and are outlined
-  in the accent color so they match the card style and the collection color.
+- **Card buttons.** Buttons on note cards are smaller (32 px) and outlined in
+  the accent color. On collection cards the actions button is a notch in the
+  top-right corner, a deeper shade of the card's own color with white dots. It
+  appears on hover or focus and is always visible on touch screens.
 - **Settings.** Reorganized into Appearance, Security, and Backup with no
   explanatory copy. Buttons are Lock Current Tab, Change Passphrase, Export,
   and Import, and Lock Current Tab is now a plain button instead of looking
@@ -48,6 +50,8 @@ All notable changes to Scratch are recorded here. The format follows
 - **Collection page.** The current collection's name is shown once, in the
   breadcrumb, with its actions button at the end of that row. The large heading
   is kept for screen readers and for narrow screens.
+- **Secret note hint.** In the note editor, the Secret note description sits
+  beside the checkbox in a lighter italic serif instead of below it.
 - **Dialogs.** The backdrop is blurred. The close button is smaller and aligned
   with the title. The collection actions menu says Edit instead of Edit
   collection.
