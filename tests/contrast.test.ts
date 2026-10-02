@@ -123,7 +123,7 @@ describe('decorative borders', () => {
   // use fails here until someone decides it is decoration and adds it. The tile and the
   // destination row are identified by their link or native radio and text, never by
   // this line; the destination row's selected state is the 2 px text-colored border.
-  const ALLOWED = ['.app-header', '.empty-state', '.tile-grid > .tile', '.crumb-list', '.conflict-version', '.destination', '.update-notice', '.update-status', '.collection-tile::before, .collection-tile::after', '.settings-section', '.palette-choice', 'html[data-note-style="paper"] .note-tile .tile-preview', 'html[data-note-style="paper"] .note-tile::after', 'html[data-collection-style="tab"] .collection-tile::before']
+  const ALLOWED = ['.app-header', '.empty-state', '.tile-grid > .tile', '.crumb-list', '.conflict-version', '.destination', '.update-notice', '.update-status', '.collection-tile::before, .collection-tile::after', '.settings-section', '.palette-choice', 'html[data-note-style="paper"] .note-tile .tile-preview', 'html[data-note-style="paper"] .note-tile::after', 'html[data-collection-style="tab"] .collection-tile::before', '.vault-card']
 
   it('only the documented container and divider rules use the decorative border token', () => {
     const used = [...globalCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]

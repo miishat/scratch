@@ -1,3 +1,5 @@
+import { Logo } from './Logo'
+
 type Props = {
   onAddNote?: () => void
   onAddCollection?: () => void
@@ -15,7 +17,7 @@ export function AppHeader({ onAddNote, onAddCollection, onSettings, onHome, sear
       if (!onHome || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
       event.preventDefault()
       onHome()
-    }}><svg className="wordmark-logo" aria-hidden="true" viewBox="0 0 48 48"><path d="M10 36l3-10 18-18 7 7-18 18zM27 12l7 7M10 43h28"/></svg>Scratch</a>
+    }}><Logo className="wordmark-logo" />Scratch</a>
     <label className="header-search"><span className="visually-hidden">Search</span><input
       type="search"
       placeholder="Search"

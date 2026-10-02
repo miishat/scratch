@@ -38,6 +38,9 @@ All notable changes to Scratch are recorded here. The format follows
   and Source Serif fonts and their license files were replaced.
 - **Install colors.** The installed app's splash and theme colors match the new
   parchment light scheme.
+- **Unlock and setup screens.** A centered card under the pencil logo and
+  wordmark, with the passphrase as a placeholder instead of a label. The Unlock
+  heading is kept for screen readers.
 - **Header buttons.** The Add menu is replaced by two buttons, + Note and
   + Collection, both with the accent color.
 - **Note cards.** Cards use an index card layout: a title row with an accent

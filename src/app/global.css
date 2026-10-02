@@ -277,3 +277,15 @@ html[data-collection-style="edge"] .tile-grid > .collection-tile { border-left: 
   .collection-tile .tile-actions .icon-button { background: oklch(from var(--tile-surface, var(--surface)) calc(l * 0.56) calc(c * 2.3) h); }
   .collection-tile .tile-actions .icon-button:hover { background: oklch(from var(--tile-surface, var(--surface)) calc(l * 0.46) calc(c * 2.5) h); }
 }
+.vault-entry { max-width: 460px; min-height: 100dvh; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+.vault-brand { display: flex; align-items: center; justify-content: center; gap: 10px; font: 600 34px/1.2 'Newsreader', Georgia, serif; }
+.vault-logo { width: 38px; height: 38px; fill: none; stroke: var(--action); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+.vault-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--action); border-radius: 18px; padding: 28px; }
+.vault-card h1 { margin: 0 0 20px; padding-bottom: 12px; border-bottom: 2px solid var(--action); font: 600 28px/1.2 'Newsreader', Georgia, serif; }
+.vault-card > p { margin: 0 0 16px; color: var(--muted); }
+.vault-card .vault-form { max-width: none; gap: 6px; }
+.vault-card .vault-form label:first-child { margin-top: 0; }
+.vault-card .dialog-actions { margin-top: 16px; }
+.vault-card .dialog-actions > button { flex: 1 1 140px; }
+.vault-card .vault-form input { height: 48px; font-size: 17px; }
+.vault-card .vault-form input::placeholder { color: var(--muted); opacity: 1; }
