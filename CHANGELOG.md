@@ -22,6 +22,9 @@ All notable changes to Scratch are recorded here. The format follows
   note straight in the editor instead of the reader.
 - **More collection colors.** Rose, Lilac, Sky, and Stone join Sage, Clay,
   Ochre, and Slate, with contrast checked in all six schemes.
+- **Deployment.** A GitHub Actions workflow typechecks, lints, tests, and builds on
+  every push and pull request, and publishes to GitHub Pages from main. Notes on
+  setup and on security headers are in docs/deployment.md.
 - **Tests.** Contrast checks now cover every color scheme
   and every collection color. New tests cover the pickers and the Edit button,
   and the browser specs were updated for the + Note and + Collection buttons.
@@ -33,6 +36,8 @@ All notable changes to Scratch are recorded here. The format follows
 - **Typography.** Newsreader is used for the wordmark, titles, headings, and
   note text, and Public Sans for controls and everything else. The Source Sans
   and Source Serif fonts and their license files were replaced.
+- **Install colors.** The installed app's splash and theme colors match the new
+  parchment light scheme.
 - **Header buttons.** The Add menu is replaced by two buttons, + Note and
   + Collection, both with the accent color.
 - **Note cards.** Cards use an index card layout: a title row with an accent
