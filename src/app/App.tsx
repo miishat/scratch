@@ -206,7 +206,7 @@ function UnlockedShell(props: AppProps) {
     if (source === 'note' && note) void navigation.closeNote()
     const selector = source === 'note' && note && outcome !== 'saved-new'
       ? `a[href="${formatRoute({ collectionId: note.parentId, noteId: note.id })}"]`
-      : '.header-add'
+      : '.header-add-note'
     pendingFocus.current = { selector, expires: Date.now() + 1000 }
   }
 

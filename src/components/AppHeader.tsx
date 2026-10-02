@@ -1,5 +1,3 @@
-import { useEffect, useId, useRef, useState } from 'react'
-
 type Props = {
   onAddNote?: () => void
   onAddCollection?: () => void
@@ -17,7 +15,7 @@ export function AppHeader({ onAddNote, onAddCollection, onSettings, onHome, sear
       if (!onHome || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
       event.preventDefault()
       onHome()
-    }}>Scratch</a>
+    }}><svg className="wordmark-logo" aria-hidden="true" viewBox="0 0 48 48"><path d="M10 36l3-10 18-18 7 7-18 18zM27 12l7 7M10 43h28"/></svg>Scratch</a>
     <label className="header-search"><span className="visually-hidden">Search</span><input
       type="search"
       placeholder="Search"
@@ -28,44 +26,12 @@ export function AppHeader({ onAddNote, onAddCollection, onSettings, onHome, sear
       onChange={onSearchChange && ((event) => onSearchChange(event.target.value))}
       onKeyDown={(event) => { if (event.key === 'Escape' && onSearchChange && searchValue) onSearchChange('') }}
     /></label>
-    <AddMenu onAddNote={onAddNote} onAddCollection={onAddCollection} />
+    {(onAddNote || onAddCollection) && <div className="header-actions">
+      {onAddNote && <button className="primary-button header-add-note" type="button" aria-label="New note" onClick={onAddNote}>+ Note</button>}
+      {onAddCollection && <button className="primary-button header-add-collection" type="button" aria-label="New collection" onClick={onAddCollection}>+ Collection</button>}
+    </div>}
     <button className="icon-button header-settings" type="button" aria-label="Settings" onClick={onSettings}>
-      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.5 2.2 1.8.8 2-.9 2.8 2.8-.9 2 .8 1.8L23 11v4l-2.2.5-.8 1.8.9 2-2.8 2.8-2-.9-1.8.8L14 23h-4l-.5-2.2-1.8-.8-2 .9-2.8-2.8.9-2-.8-1.8L1 15v-4l2.2-.5.8-1.8-.9-2 2.8-2.8 2 .9 1.8-.8z" transform="translate(0 -1) scale(1 .96)"/></svg>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
   </div></header>
-}
-
-// Offers only the creation actions that are wired, so no control does nothing.
-function AddMenu({ onAddNote, onAddCollection }: Pick<Props, 'onAddNote' | 'onAddCollection'>) {
-  const [open, setOpen] = useState(false)
-  const id = useId()
-  const root = useRef<HTMLDivElement>(null)
-  const toggle = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function away(event: MouseEvent) {
-      if (root.current && !root.current.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', away)
-    return () => document.removeEventListener('mousedown', away)
-  }, [open])
-
-  function choose(action: (() => void) | undefined) {
-    setOpen(false)
-    action?.()
-  }
-
-  return <div className="header-add-wrap" ref={root} onKeyDown={(event) => {
-    if (event.key !== 'Escape' || !open) return
-    event.stopPropagation()
-    setOpen(false)
-    toggle.current?.focus()
-  }}>
-    <button ref={toggle} className="primary-button header-add" type="button" aria-label="Add" aria-expanded={open} aria-controls={open ? id : undefined} disabled={!onAddNote && !onAddCollection} onClick={() => setOpen(!open)}>+ Add</button>
-    {open && <div id={id} className="add-menu">
-      {onAddNote && <button type="button" onClick={() => choose(onAddNote)}>Add note</button>}
-      {onAddCollection && <button type="button" onClick={() => choose(onAddCollection)}>Add collection</button>}
-    </div>}
-  </div>
 }

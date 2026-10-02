@@ -27,8 +27,7 @@ async function fillNote(page: Page, title: string, body: string) {
 }
 
 async function addNoteFromHeader(page: Page) {
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
-  await page.getByRole('button', { name: 'Add note' }).click()
+  await page.getByRole('button', { name: 'New note', exact: true }).click()
 }
 
 // Creates the library online with one note, then waits until the worker controls the page.
@@ -216,7 +215,7 @@ test('license files are served as files, not replaced by the app shell', async (
   const page = await warm(context)
   // A navigation is what the worker's app-shell fallback would otherwise answer.
   const license = await context.newPage()
-  await license.goto('/licenses/source-sans-3-OFL.txt')
+  await license.goto('/licenses/public-sans-OFL.txt')
   await expect(license.locator('body')).toContainText('SIL OPEN FONT LICENSE')
   await expect(license.locator('#root')).toHaveCount(0)
   await page.close()

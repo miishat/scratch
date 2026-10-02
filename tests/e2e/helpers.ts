@@ -18,19 +18,18 @@ export async function createLibrary(page: Page, entry = '/') {
   await page.getByLabel('Passphrase', { exact: true }).fill(PASSPHRASE)
   await page.getByLabel('Confirm passphrase').fill(PASSPHRASE)
   await page.getByRole('button', { name: 'Create vault' }).click()
-  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
 }
 
 export async function unlock(page: Page) {
   await expect(page.getByRole('heading', { name: 'Unlock Scratch' })).toBeVisible()
   await page.getByLabel('Passphrase', { exact: true }).fill(PASSPHRASE)
   await page.getByRole('button', { name: 'Unlock' }).click()
-  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
 }
 
 export async function openAddMenu(page: Page, choice: 'Add note' | 'Add collection') {
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
-  await page.locator('.add-menu').getByRole('button', { name: choice }).click()
+  await page.getByRole('button', { name: choice === 'Add note' ? 'New note' : 'New collection', exact: true }).click()
 }
 
 export interface NoteInput { body: string, title?: string, secret?: boolean }
@@ -44,7 +43,7 @@ export async function fillEditor(page: Page, note: NoteInput) {
   if (note.secret) await page.getByRole('checkbox', { name: 'Secret note' }).check()
 }
 
-// Add > Add note, type, optionally title and secret, Save.
+// + Note, type, optionally title and secret, Save.
 export async function addNote(page: Page, note: NoteInput) {
   await openAddMenu(page, 'Add note')
   await fillEditor(page, note)
@@ -88,7 +87,7 @@ export async function importBackupOnSetup(page: Page, path: string, expectedItem
   await page.getByRole('button', { name: 'Review backup' }).click()
   await expect(page.getByText(`This backup contains ${expectedItems} ${expectedItems === 1 ? 'item' : 'items'}.`)).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: 'Import library' }).click()
-  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
 }
 
 export interface RecordedRequest { url: string, method: string, postData: string | null, fromServiceWorker: boolean }

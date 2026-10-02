@@ -363,31 +363,25 @@ describe('dirty editor guard', () => {
   })
 })
 
-describe('Add menu', () => {
-  it('opens a menu of wired creation actions and closes with Escape', async () => {
+describe('Creation buttons', () => {
+  it('offers a button for each wired creation action', async () => {
     const user = userEvent.setup()
     const onAddNote = vi.fn()
     const onAddCollection = vi.fn()
     render(<AppHeader onAddNote={onAddNote} onAddCollection={onAddCollection} />)
-    const add = screen.getByRole('button', { name: 'Add' })
-    expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument()
-    await user.click(add)
-    expect(add).toHaveAttribute('aria-expanded', 'true')
-    await user.keyboard('{Escape}')
-    expect(add).toHaveAttribute('aria-expanded', 'false')
-    expect(add).toHaveFocus()
-    await user.click(add)
-    await user.click(screen.getByRole('button', { name: 'Add collection' }))
+    await user.click(screen.getByRole('button', { name: 'New collection' }))
     expect(onAddCollection).toHaveBeenCalledTimes(1)
-    await user.click(add)
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getByRole('button', { name: 'New note' }))
     expect(onAddNote).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('button', { name: 'Add note' })).not.toBeInTheDocument()
   })
 
-  it('disables Add while no creation action is wired', () => {
-    render(<AppHeader />)
-    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+  it('offers only the creation actions that are wired', () => {
+    const { rerender } = render(<AppHeader onAddNote={() => {}} />)
+    expect(screen.getByRole('button', { name: 'New note' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New collection' })).not.toBeInTheDocument()
+    rerender(<AppHeader />)
+    expect(screen.queryByRole('button', { name: 'New note' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New collection' })).not.toBeInTheDocument()
   })
 })
 

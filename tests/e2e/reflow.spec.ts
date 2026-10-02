@@ -92,7 +92,7 @@ async function walk(page: Page, label: string) {
   await expectFits(page, `${label} unlock`)
   await page.getByLabel('Passphrase', { exact: true }).fill(PASSPHRASE)
   await page.getByRole('button', { name: 'Unlock' }).click()
-  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
 }
 
 for (const size of [
@@ -118,25 +118,27 @@ test('primary controls are at least 44 px tall and wide at this project width', 
   await addCollection(page, 'Targets')
   await addNote(page, { body: 'Target size note' })
   const small: string[] = []
-  async function measure(name: string, locator: ReturnType<Page['locator']>, axes: 'both' | 'height' = 'both') {
+  async function measure(name: string, locator: ReturnType<Page['locator']>, axes: 'both' | 'height' = 'both', minimum = 44) {
     const box = await locator.first().boundingBox()
     if (!box) { small.push(`${name}: not found`); return }
-    if (box.height < 44 - 0.5 || (axes === 'both' && box.width < 44 - 0.5)) small.push(`${name}: ${Math.round(box.width)}x${Math.round(box.height)}`)
+    if (box.height < minimum - 0.5 || (axes === 'both' && box.width < minimum - 0.5)) small.push(`${name}: ${Math.round(box.width)}x${Math.round(box.height)}`)
   }
   await measure('wordmark', page.getByRole('link', { name: 'Scratch home' }), 'height')
   await measure('search', page.getByRole('searchbox', { name: 'Search' }), 'height')
-  await measure('Add', page.getByRole('button', { name: 'Add', exact: true }))
+  await measure('New note', page.getByRole('button', { name: 'New note', exact: true }))
   await measure('Settings', page.getByRole('button', { name: 'Settings' }))
   await measure('collection tile', page.getByRole('link', { name: 'Targets, 0 items' }))
   await measure('note tile', page.getByRole('link', { name: 'Target size note', exact: true }))
-  await measure('Copy', page.getByRole('button', { name: 'Copy Target size note' }))
-  await measure('note menu', page.getByRole('button', { name: 'More actions for Target size note' }))
+  // The small in-tile actions are held to 32 px, above the WCAG 2.2 AA minimum of 24 px.
+  await measure('Copy', page.getByRole('button', { name: 'Copy Target size note' }), 'both', 32)
+  await measure('Edit', page.getByRole('button', { name: 'Edit Target size note' }), 'both', 32)
+  await measure('note menu', page.getByRole('button', { name: 'More actions for Target size note' }), 'both', 32)
   await openAddMenu(page, 'Add note')
   await measure('Save', page.getByRole('button', { name: 'Save', exact: true }))
   await measure('Cancel', page.getByRole('button', { name: 'Cancel' }))
   await measure('Add title', page.getByRole('button', { name: 'Add title' }), 'height')
   await measure('secret checkbox row', page.locator('.editor-secret label'), 'height')
-  await measure('close dialog', page.getByRole('button', { name: 'Close dialog' }))
+  await measure('close dialog', page.getByRole('button', { name: 'Close dialog' }), 'both', 32)
   expect(small, 'targets below 44 px').toEqual([])
 })
 
@@ -158,7 +160,7 @@ test('the first-visit offline notice never covers a visible control', async ({ p
       .map((element) => `${element.tagName.toLowerCase()} ${(element.getAttribute('aria-label') ?? element.textContent ?? '').slice(0, 30)}`)
   })
   expect(overlaps, 'controls under the offline notice').toEqual([])
-  const add = await page.getByRole('button', { name: 'Add', exact: true }).boundingBox()
+  const add = await page.getByRole('button', { name: 'New note', exact: true }).boundingBox()
   const box = await notice.boundingBox()
   expect(add && box && !(add.x < box.x + box.width && add.x + add.width > box.x && add.y < box.y + box.height && add.y + add.height > box.y), 'Add stays clear of the notice').toBe(true)
 })

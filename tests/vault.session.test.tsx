@@ -219,7 +219,7 @@ async function unlockAndWaitForLibrary(user: ReturnType<typeof typing>): Promise
 
 async function openLockFromSettings(user: ReturnType<typeof typing>): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'Settings' }))
-  await user.click(screen.getByRole('button', { name: 'Lock now' }))
+  await user.click(screen.getByRole('button', { name: 'Lock Current Tab' }))
 }
 
 async function typeDraft(user: ReturnType<typeof typing>): Promise<void> {
@@ -467,7 +467,7 @@ describe('vault session lifecycle', () => {
     await unlockAndWaitForLibrary(user)
 
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    await user.click(screen.getByRole('button', { name: 'Change passphrase' }))
+    await user.click(screen.getByRole('button', { name: 'Change Passphrase' }))
     const dialog = screen.getByRole('dialog', { name: 'Change passphrase' })
     await user.type(within(dialog).getByLabelText('Current passphrase'), 'not the current phrase')
     await user.type(within(dialog).getByLabelText('New passphrase'), NEW_PASSPHRASE)
@@ -722,7 +722,7 @@ describe('session hardening', () => {
     renderApp()
     await unlockAndWaitForLibrary(user)
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    await user.click(screen.getByRole('button', { name: 'Change passphrase' }))
+    await user.click(screen.getByRole('button', { name: 'Change Passphrase' }))
     const dialog = screen.getByRole('dialog', { name: 'Change passphrase' })
     await user.type(within(dialog).getByLabelText('Current passphrase'), PASSPHRASE)
     await user.type(within(dialog).getByLabelText('New passphrase'), NEW_PASSPHRASE)

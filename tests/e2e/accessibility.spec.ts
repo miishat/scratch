@@ -111,7 +111,7 @@ test.describe('axe-core on every screen', () => {
 
           await openSettings(page)
           await scan(page, 'settings')
-          await page.getByRole('button', { name: 'Change passphrase' }).click()
+          await page.getByRole('button', { name: 'Change Passphrase' }).click()
           await expect(page.getByRole('dialog')).toBeVisible()
           await scan(page, 'change passphrase dialog')
           await closeTop(page)
@@ -226,27 +226,21 @@ async function tabCycle(page: Page, limit = 40): Promise<string[]> {
 }
 
 test.describe('keyboard only', () => {
-  test('Add menu: Enter opens, items are reachable, Escape closes and focus returns to Add', async ({ page }) => {
+  test('creation buttons: + Note then + Collection are reachable by Tab and open their dialogs', async ({ page }) => {
     await createLibrary(page)
-    const add = page.getByRole('button', { name: 'Add', exact: true })
-    await add.focus()
+    await page.getByRole('button', { name: 'New note', exact: true }).focus()
+    await page.keyboard.press('Tab')
+    expect(await focused(page)).toBe('button:New collection')
     await page.keyboard.press('Enter')
-    const menu = page.locator('.add-menu')
-    await expect(menu).toBeVisible()
-    await page.keyboard.press('Tab')
-    expect(await focused(page)).toBe('button:Add note')
-    await page.keyboard.press('Tab')
-    expect(await focused(page)).toBe('button:Add collection')
+    await expect(page.getByRole('dialog', { name: 'New collection' })).toBeVisible()
     await page.keyboard.press('Escape')
-    await expect(menu).toBeHidden()
-    expect(await focused(page)).toBe('button:Add')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    expect(await focused(page)).toBe('button:New collection')
   })
 
   test('new note by keyboard: focus lands in the body, Tab stays inside, Escape closes a clean editor and returns to Add', async ({ page }) => {
     await createLibrary(page)
-    await page.getByRole('button', { name: 'Add', exact: true }).focus()
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('Tab')
+    await page.getByRole('button', { name: 'New note', exact: true }).focus()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('dialog', { name: 'New note' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Note body' })).toBeFocused()
@@ -255,7 +249,7 @@ test.describe('keyboard only', () => {
     expect(order.every((entry) => entry !== 'body'), `focus never falls to the page: ${order.join(' > ')}`).toBe(true)
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toBeHidden()
-    expect(await focused(page)).toBe('button:Add')
+    expect(await focused(page)).toBe('button:New note')
   })
 
   test('a dirty editor asks before Escape closes it, and Keep editing returns focus to the draft', async ({ page }) => {
@@ -277,7 +271,7 @@ test.describe('keyboard only', () => {
     await addNote(page, { body: 'Movable note' })
     // The editor hands focus back to Add a moment after it unmounts; wait for that so the
     // test's own focus is not taken away.
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeFocused()
     const more = page.getByRole('button', { name: 'More actions for Movable note' })
     await more.focus()
     await page.keyboard.press('Enter')
@@ -326,7 +320,7 @@ test.describe('keyboard only', () => {
   test('search by keyboard: type, reach the results, clear with the keyboard', async ({ page }) => {
     await createLibrary(page)
     await addNote(page, { body: 'Findable pear note' })
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeFocused()
     await page.getByRole('searchbox', { name: 'Search' }).focus()
     await page.keyboard.type('pear')
     await expect(page.getByRole('list', { name: 'Search results' })).toBeVisible()
@@ -350,12 +344,12 @@ test.describe('keyboard only', () => {
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
     const order = await tabCycle(page)
     expect(order.every((entry) => entry !== 'body'), order.join(' > ')).toBe(true)
-    await page.getByRole('button', { name: 'Lock now' }).focus()
+    await page.getByRole('button', { name: 'Lock Current Tab' }).focus()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('heading', { name: 'Unlock Scratch' })).toBeVisible()
     await page.keyboard.type(PASSPHRASE)
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
   })
 
   test('backup dialogs by keyboard: Escape closes them and no key press is trapped', async ({ page }) => {
@@ -378,11 +372,11 @@ test.describe('keyboard only', () => {
     await createLibrary(page)
     await addCollection(page, 'Order')
     await addNote(page, { body: 'Order note' })
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeFocused()
     await page.locator('body').click({ position: { x: 1, y: 1 } })
     await page.keyboard.press('Tab')
     const order = await tabCycle(page, 60)
-    expect(order).toContain('button:Add')
+    expect(order).toContain('button:New note')
     expect(order).toContain('button:Settings')
     // Tiles are links. Safari and its WebKit port skip links when Tab is pressed unless the
     // person turns on "Press Tab to highlight each item" (Option+Tab otherwise), so this

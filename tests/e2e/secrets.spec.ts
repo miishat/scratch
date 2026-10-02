@@ -92,7 +92,7 @@ function expectNoneOf(haystack: string, needles: string[], where: string) {
 }
 
 test('the storage scanner finds a plain marker it should find (sensitivity control)', async ({ page }) => {
-  await page.goto('/licenses/source-sans-3-OFL.txt')
+  await page.goto('/licenses/public-sans-OFL.txt')
   await page.evaluate(async () => {
     localStorage.setItem('probe', 'marker-in-local')
     sessionStorage.setItem('probe', 'marker-in-session')

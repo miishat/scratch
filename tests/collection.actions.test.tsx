@@ -113,8 +113,7 @@ describe('create and edit collections', () => {
   it('creates a collection in the current parent with the chosen color', async () => {
     const parent = await seedCollection('Inbox', null)
     const user = await openApp(`#/c/${parent}`)
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add collection' }))
+    await user.click(screen.getByRole('button', { name: 'New collection' }))
     const dialog = await screen.findByRole('dialog', { name: 'New collection' })
     expect(within(dialog).getByRole('button', { name: 'Sage' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(dialog).getAllByRole('button', { name: /^(Sage|Clay|Ochre|Slate)$/ })).toHaveLength(4)
@@ -130,15 +129,14 @@ describe('create and edit collections', () => {
     expect(created).toHaveLength(1)
     expect(created[0]).toMatchObject({ kind: 'collection', parentId: parent, color: 'clay' })
     expect(await screen.findByRole('link', { name: 'Recipes, 0 items' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'New collection' })).toHaveFocus()
   })
 
   it('requires a title, rejects an overlong one, and allows duplicates', async () => {
     await seedCollection('Inbox', null)
     vi.mocked(createCollection).mockClear()
     const user = await openApp()
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add collection' }))
+    await user.click(screen.getByRole('button', { name: 'New collection' }))
     const dialog = await screen.findByRole('dialog', { name: 'New collection' })
     const title = within(dialog).getByRole('textbox', { name: 'Title' })
     await user.type(title, '   ')
@@ -160,8 +158,7 @@ describe('create and edit collections', () => {
 
   it('writes once for a double click and keeps the editor open on failure', async () => {
     const user = await openApp()
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add collection' }))
+    await user.click(screen.getByRole('button', { name: 'New collection' }))
     const dialog = await screen.findByRole('dialog', { name: 'New collection' })
     await user.type(within(dialog).getByRole('textbox', { name: 'Title' }), 'Once')
     vi.mocked(createCollection).mockResolvedValueOnce({ ok: false, code: 'quota', message: 'Not enough storage space to save. Free some space and try again.' })
@@ -181,7 +178,7 @@ describe('create and edit collections', () => {
     const note = await seedNote('Shopping', parent)
     const before = await items()
     const user = await openApp()
-    await chooseAction(user, 'Inbox', 'Edit collection')
+    await chooseAction(user, 'Inbox', 'Edit')
     const dialog = await screen.findByRole('dialog', { name: 'Edit collection' })
     const title = within(dialog).getByRole('textbox', { name: 'Title' })
     expect(title).toHaveValue('Inbox')
@@ -413,7 +410,7 @@ describe('retrying after another tab wrote', () => {
   }
 
   async function openEdit(user: User, name: string, title: string) {
-    await chooseAction(user, name, 'Edit collection')
+    await chooseAction(user, name, 'Edit')
     const dialog = await screen.findByRole('dialog', { name: 'Edit collection' })
     const field = within(dialog).getByRole('textbox', { name: 'Title' })
     await user.clear(field)

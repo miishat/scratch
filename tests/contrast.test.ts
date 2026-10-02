@@ -21,8 +21,8 @@ function readTheme(selector: string): Theme {
 }
 
 const themes: Record<string, Theme> = {
-  light: readTheme(':root, :root[data-theme="light"]'),
-  dark: readTheme(':root[data-theme="dark"]'),
+  parchment: readTheme(':root, [data-palette="parchment"]'),
+  ...Object.fromEntries(['classic', 'rosewater', 'espresso', 'slate', 'forest'].map((id) => [id, readTheme(`[data-palette="${id}"]`)])),
 }
 
 function luminance(hex: string): number {
@@ -38,7 +38,7 @@ function ratio(a: string, b: string): number {
   return (light + 0.05) / (dark + 0.05)
 }
 
-const SURFACES = ['page-bg', 'surface', 'sage', 'clay', 'ochre', 'slate'] as const
+const SURFACES = ['page-bg', 'surface', 'sage', 'clay', 'ochre', 'slate', 'rose', 'lilac', 'sky', 'stone'] as const
 
 describe.each(Object.entries(themes))('%s theme contrast', (_name, theme) => {
   it('defines every token the checks use', () => {
@@ -88,7 +88,7 @@ describe('hover states', () => {
   })
 
   describe.each(Object.entries(themes))('%s theme', (_name, theme) => {
-    it.each(['surface', 'sage', 'clay', 'ochre', 'slate'] as const)('text, muted text, and the focus-colored border on a hovered %s tile keep their ratios', (tint) => {
+    it.each(['surface', 'sage', 'clay', 'ochre', 'slate', 'rose', 'lilac', 'sky', 'stone'] as const)('text, muted text, and the focus-colored border on a hovered %s tile keep their ratios', (tint) => {
       const hovered = mix(theme[tint], theme['page-bg'], 0.96)
       expect(ratio(theme.text, hovered)).toBeGreaterThanOrEqual(4.5)
       expect(ratio(theme.muted, hovered)).toBeGreaterThanOrEqual(4.5)
@@ -123,7 +123,7 @@ describe('decorative borders', () => {
   // use fails here until someone decides it is decoration and adds it. The tile and the
   // destination row are identified by their link or native radio and text, never by
   // this line; the destination row's selected state is the 2 px text-colored border.
-  const ALLOWED = ['.app-header', '.add-menu', '.empty-state', '.tile-grid > .tile', '.crumb-list', '.conflict-version', '.destination', '.update-notice', '.update-status']
+  const ALLOWED = ['.app-header', '.empty-state', '.tile-grid > .tile', '.crumb-list', '.conflict-version', '.destination', '.update-notice', '.update-status', '.collection-tile::before, .collection-tile::after', '.settings-section', '.palette-choice', 'html[data-note-style="paper"] .note-tile .tile-preview', 'html[data-note-style="paper"] .note-tile::after', 'html[data-collection-style="tab"] .collection-tile::before']
 
   it('only the documented container and divider rules use the decorative border token', () => {
     const used = [...globalCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]

@@ -230,7 +230,7 @@ test('main task speed: unlocked Add, Note, type, Save needs no title, wizard, or
   await expect(dialogs).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Quick thought, no title', exact: true })).toBeVisible()
   // Focus returns to Add so the next capture is one activation away.
-  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeFocused()
 })
 
 test('responsive parity: capture, find, copy, move, and back up work the same at this width', async ({ context, page, browserName }, testInfo) => {
@@ -259,7 +259,7 @@ test('responsive parity: capture, find, copy, move, and back up work the same at
     expect((await readFile(path, 'utf8')).length).toBeGreaterThan(100)
     // every one of these controls is a real, visible, in-viewport control at this width
     const viewport = page.viewportSize()!
-    for (const name of ['Add', 'Settings']) {
+    for (const name of ['New note', 'New collection', 'Settings']) {
       const box = await page.getByRole('button', { name, exact: true }).boundingBox()
       expect(box && box.x >= 0 && box.x + box.width <= viewport.width, `${name} fits the viewport`).toBe(true)
     }

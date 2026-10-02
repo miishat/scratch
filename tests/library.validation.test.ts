@@ -117,6 +117,7 @@ describe('collection validation', () => {
     expect(isCollectionColor('sage')).toBe(true)
     expect(isCollectionColor('clay')).toBe(true)
     expect(isCollectionColor('ochre')).toBe(true)
+    for (const color of ['rose', 'lilac', 'sky', 'stone']) expect(isCollectionColor(color)).toBe(true)
     expect(isCollectionColor('slate')).toBe(true)
     expect(isCollectionColor('violet')).toBe(false)
   })
