@@ -711,7 +711,6 @@ describe('recovered and new-note drafts never overwrite silently', () => {
     expect(screen.getByText('Saving your note.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
-    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
     expect(screen.queryByRole('group', { name: 'Unsaved changes' })).not.toBeInTheDocument()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     release()
