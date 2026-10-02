@@ -28,6 +28,9 @@ All notable changes to Scratch are recorded here. The format follows
 - **Tests.** Contrast checks now cover every color scheme
   and every collection color. New tests cover the pickers and the Edit button,
   and the browser specs were updated for the + Note and + Collection buttons.
+- **Numbered lists.** Pressing Enter at the end of a numbered line in a note
+  (1. or 1)) starts the next number in the same style. Enter on an empty
+  numbered line ends the list.
 
 ### Changed
 
@@ -72,6 +75,10 @@ All notable changes to Scratch are recorded here. The format follows
   that looked like an eye.
 - **Note title focus ring.** The highlight around the title field no longer
   gets cut off in the editor.
+- **Delete dialog.** The redundant close cross is gone; Cancel remains.
+- **Dialog close button.** Now a 36 px square instead of a stretched shape.
+- **Scrollbars.** Thin and tinted from the active theme.
+- **Secret note option.** The checkbox is centered against its label and hint.
 
 ## [0.1.0] - 2026-10-01
 

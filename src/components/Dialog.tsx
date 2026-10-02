@@ -9,6 +9,8 @@ type DialogProps = {
   className?: string
   // Selector for the element that takes focus on open instead of the first control.
   initialFocus?: string
+  // Omits the heading's close button when the dialog already has its own Cancel.
+  hideClose?: boolean
 }
 const focusable = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 // What Tab actually visits: a named radio group is one stop (its checked radio, or
@@ -44,7 +46,7 @@ export function useTopDialogSlot(): HTMLElement | null {
   return useSyncExternalStore(subscribeSlots, () => (topSlot?.isConnected ? topSlot : null))
 }
 
-export function Dialog({ title, children, onRequestClose, canClose, className, initialFocus }: DialogProps) {
+export function Dialog({ title, children, onRequestClose, canClose, className, initialFocus, hideClose }: DialogProps) {
   const titleId = useId()
   const ref = useRef<HTMLDivElement>(null)
   const slotRef = useRef<HTMLDivElement>(null)
@@ -98,7 +100,7 @@ export function Dialog({ title, children, onRequestClose, canClose, className, i
   }
   return <div className={className ? `dialog-backdrop ${className}-backdrop` : 'dialog-backdrop'} onMouseDown={event => { if (event.target === event.currentTarget) requestClose() }}>
     <div ref={ref} className={className ? `dialog ${className}` : 'dialog'} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} onKeyDown={onKeyDown}>
-      <div className="dialog-heading"><h2 id={titleId}>{title}</h2><button className="icon-button" type="button" aria-label="Close dialog" onClick={requestClose}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button></div>
+      <div className="dialog-heading"><h2 id={titleId}>{title}</h2>{!hideClose && <button className="icon-button" type="button" aria-label="Close dialog" onClick={requestClose}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}</div>
       <div className="dialog-notice-slot" ref={slotRef} />
       {children}
     </div>

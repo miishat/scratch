@@ -3,6 +3,7 @@ import { Dialog } from '../../components/Dialog'
 import { useLibrary } from '../library/LibraryProvider'
 import type { ItemId, LibraryItem } from '../library/types'
 import type { DraftContent } from '../vault/session'
+import { continueNumberedList } from './listContinuation'
 import { NoteConflictPanel } from './NoteConflictPanel'
 import { NoteReader } from './NoteReader'
 import { useNoteDraft, type EditorOutcome } from './useNoteDraft'
@@ -56,6 +57,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
   const titleId = useId()
   const bodyId = useId()
   const hintId = useId()
+  const secretId = useId()
   const draft = useNoteDraft({ parentId, note, recovered, onClose, onResume: () => bodyRef.current?.focus() })
   useVisualViewport()
 
@@ -88,6 +90,17 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
       event.preventDefault()
       void submit()
     }
+  }
+
+  function onBodyKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    const area = event.currentTarget
+    const edit = continueNumberedList(area.value, area.selectionStart, area.selectionEnd)
+    if (!edit) return
+    event.preventDefault()
+    draft.setBody(edit.value)
+    requestAnimationFrame(() => area.setSelectionRange(edit.caret, edit.caret))
   }
 
   function cancel() {
@@ -152,17 +165,18 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
             spellCheck={!values.isSecret}
             autoComplete="off"
             onChange={(event) => draft.setBody(event.target.value)}
+            onKeyDown={onBodyKeyDown}
           />
           <div className="editor-secret">
-            <label>
-              <input
-                type="checkbox"
-                checked={values.isSecret}
-                disabled={draft.saving}
-                aria-describedby={hintId}
-                onChange={(event) => draft.setSecret(event.target.checked)}
-              /> Secret note
-            </label>
+            <input
+              id={secretId}
+              type="checkbox"
+              checked={values.isSecret}
+              disabled={draft.saving}
+              aria-describedby={hintId}
+              onChange={(event) => draft.setSecret(event.target.checked)}
+            />
+            <label htmlFor={secretId}>Secret note</label>
             <p id={hintId} className="form-hint">Masked until you reveal it. A secret note needs a title.</p>
           </div>
           <p role="status" className="form-hint editor-saving">{draft.saving ? 'Saving your note.' : ''}</p>
