@@ -178,7 +178,7 @@ function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<No
               onChange={(event) => draft.setSecret(event.target.checked)}
             />
             <label htmlFor={secretId}>Secret note</label>
-            <p id={hintId} className="form-hint">Masked until revealed. Needs a title.</p>
+            <p id={hintId} className="form-hint">Masked, needs a title</p>
           </div>
           <p role="status" className="form-hint editor-saving">{draft.saving ? 'Saving your note.' : ''}</p>
           {draft.failure && !reviewing && <p role="alert" className="form-error">{draft.failure.message}</p>}

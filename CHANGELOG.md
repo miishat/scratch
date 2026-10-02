@@ -89,10 +89,10 @@ All notable changes to Scratch are recorded here. The format follows
 - **Dialog close button.** Now a 36 px square instead of a stretched shape.
 - **Scrollbars.** Thin and tinted from the active theme.
 - **Secret note option.** The checkbox is centered against its label and hint.
-- **Secret note option.** The label and hint now share one line (the hint is
-  shorter) instead of stacking.
-- **Logo alignment.** The pencil now lines up with the "Scratch" title in the
-  header and on the unlock screen.
+- **Secret note option.** The label and hint now share one line on a phone
+  (the hint reads "Masked, needs a title") instead of stacking.
+- **Logo alignment.** The pencil now scales with the "Scratch" title and is
+  centered on its capitals in the header and on the unlock screen.
 - **Phone dialogs.** Action menus, New and Edit collection, Move, Delete, and
   Settings are bottom sheets that take only the height of their content instead
   of filling the screen.
