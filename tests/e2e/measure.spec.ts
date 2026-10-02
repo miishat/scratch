@@ -58,7 +58,7 @@ test('unlock, import, warm navigation, and search with 1,000 items', async ({ pa
       }).observe(document.body, { childList: true, subtree: true })
     })
     await page.getByRole('button', { name: 'Unlock' }).click()
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible({ timeout: 30000 })
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toBeVisible({ timeout: 30000 })
     await page.waitForFunction(() => (window as unknown as Hooks).__t.shown !== undefined)
     const t = await page.evaluate(() => (window as unknown as Hooks).__t)
     unlockTimes.push(t.shown! - t.click!)

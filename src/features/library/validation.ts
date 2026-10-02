@@ -32,7 +32,7 @@ export function isBlank(text: string | null | undefined): boolean {
 }
 
 export function isCollectionColor(value: unknown): value is CollectionColor {
-  return value === 'sage' || value === 'clay' || value === 'ochre' || value === 'slate'
+  return value === 'sage' || value === 'clay' || value === 'ochre' || value === 'slate' || value === 'rose' || value === 'lilac' || value === 'sky' || value === 'stone'
 }
 
 export function isItemKind(value: unknown): value is ItemKind {

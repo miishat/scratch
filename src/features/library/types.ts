@@ -7,7 +7,7 @@ export type ItemId = string
 export type VaultId = string
 export type Generation = number
 export type ItemKind = 'collection' | 'note'
-export type CollectionColor = 'sage' | 'clay' | 'ochre' | 'slate'
+export type CollectionColor = 'sage' | 'clay' | 'ochre' | 'slate' | 'rose' | 'lilac' | 'sky' | 'stone'
 
 // A decrypted item. Structural fields (id, vaultId, parentId, kind, version,
 // timestamps) are unencrypted; title, body, isSecret, and color are encrypted at

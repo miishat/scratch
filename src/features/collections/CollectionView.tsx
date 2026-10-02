@@ -65,11 +65,11 @@ export function CollectionView({ items, onAddNote, onAddCollection, onCopyNote, 
     <p className="route-notice" role="status">{message}</p>
     {current
       ? <>
-        <Breadcrumbs path={path} />
-        <div className="collection-heading-row">
-          <h1 className="collection-heading">{current.title}</h1>
+        <div className="collection-top">
+          <Breadcrumbs path={path} />
           {onItemMenu && <button className="icon-button" type="button" aria-label={`More actions for ${current.title}`} onClick={() => onItemMenu(current)}><DotsIcon /></button>}
         </div>
+        <h1 className="collection-heading">{current.title}</h1>
       </>
       : children.length > 0 && <h1 className="visually-hidden">Scratch</h1>}
     {body}

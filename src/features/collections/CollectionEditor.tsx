@@ -13,6 +13,10 @@ export const COLOR_CHOICES: ReadonlyArray<{ color: CollectionColor, label: strin
   { color: 'clay', label: 'Clay' },
   { color: 'ochre', label: 'Ochre' },
   { color: 'slate', label: 'Slate' },
+  { color: 'rose', label: 'Rose' },
+  { color: 'lilac', label: 'Lilac' },
+  { color: 'sky', label: 'Sky' },
+  { color: 'stone', label: 'Stone' },
 ]
 
 type Props =

@@ -100,8 +100,7 @@ async function openApp(options: { hash?: string, children?: React.ReactNode } = 
 }
 
 async function startNote(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Add' }))
-  await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add note' }))
+  await user.click(screen.getByRole('button', { name: 'New note' }))
   return screen.getByRole('textbox', { name: 'Note body' })
 }
 
@@ -127,7 +126,7 @@ describe('quick capture', () => {
     expect(created).toHaveLength(1)
     expect(created[0]).toMatchObject({ parentId: collectionId, body: 'Call the dentist\nBring the form', isSecret: false })
     expect(await screen.findByRole('link', { name: 'Call the dentist' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'New note' })).toHaveFocus()
   })
 
   it('stores the body byte for byte, including spaces, newlines, and Unicode', async () => {
@@ -307,7 +306,7 @@ describe('dirty guards', () => {
     const body = await startNote(user)
     await user.type(body, 'precious')
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    const change = await screen.findByRole('button', { name: 'Change passphrase' })
+    const change = await screen.findByRole('button', { name: 'Change Passphrase' })
     expect(change).toBeDisabled()
     expect(screen.getByText(/Save or discard your unsaved note/)).toBeInTheDocument()
     expect(screen.getAllByRole('textbox', { name: 'Note body' })[0]).toHaveValue('precious')
@@ -318,7 +317,7 @@ describe('dirty guards', () => {
     const body = await startNote(user)
     await user.type(body, 'saved while locking')
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Lock now' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock Current Tab' }))
     await user.click(await screen.findByRole('button', { name: 'Save and lock' }))
     await screen.findByRole('heading', { name: 'Unlock Scratch' })
     expect((await notes()).map((note) => note.body)).toEqual(['saved while locking'])
@@ -378,6 +377,15 @@ describe('editing an existing note', () => {
     expect(saved).toMatchObject({ id: noteId, version: 2, body: 'milk and eggs and bread', title: 'Shopping' })
     expect(window.location.hash).toBe(`#/c/${collectionId}`)
     await waitFor(() => expect(screen.getByRole('link', { name: 'Shopping' })).toHaveFocus())
+  })
+
+  it('opens straight in the editor from the Edit button on a tile', async () => {
+    await seed()
+    const user = await openApp({ hash: `#/c/${collectionId}` })
+    await user.click(await screen.findByRole('button', { name: 'Edit Shopping' }))
+    const body = await screen.findByRole('textbox', { name: 'Note body' })
+    expect(body).toHaveValue('milk and eggs')
+    expect(screen.getByRole('dialog', { name: 'Edit note' })).toBeInTheDocument()
   })
 
   it('shows Latest and Your draft after a stale save, leaving the newer note untouched', async () => {

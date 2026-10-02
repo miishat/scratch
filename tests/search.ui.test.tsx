@@ -165,7 +165,7 @@ describe('header search', () => {
     advance(150)
     expect(screen.getByRole('list', { name: 'Search results' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Lock now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lock Current Tab' }))
     await until(() => expect(screen.getByRole('heading', { name: 'Unlock Scratch' })).toBeInTheDocument())
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/garden|result|No matches/)

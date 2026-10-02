@@ -1,4 +1,22 @@
-:root, :root[data-theme="light"] {
+:root, [data-palette="parchment"] {
+  --page-bg: #F2E9D8;
+  --surface: #FBF5E8;
+  --text: #282923;
+  --muted: #5F5A4C;
+  --border: #D9CCB2;
+  --action: #626C39;
+  --action-text: #FBF5E8;
+  --sage: #E6E9D2;
+  --clay: #F0D9C6;
+  --ochre: #F0E2B8;
+  --slate: #DFE8EA;
+  --rose: #F2DADA;
+  --lilac: #E6DFF0;
+  --sky: #DCE8F2;
+  --stone: #E6E1D6;
+  --focus: #626C39;
+}
+[data-palette="classic"] {
   --page-bg: #F7F4EE;
   --surface: #FFFDF8;
   --text: #282923;
@@ -10,19 +28,81 @@
   --clay: #F1DED2;
   --ochre: #F2E7C7;
   --slate: #DFE8EA;
+  --rose: #F2DADA;
+  --lilac: #E6DFF0;
+  --sky: #DCE8F2;
+  --stone: #E6E1D6;
   --focus: #626C39;
 }
-:root[data-theme="dark"] {
-  --page-bg: #191B18;
-  --surface: #232620;
-  --text: #EFECE3;
-  --muted: #B6B9AB;
-  --border: #454A40;
-  --action: #BBC697;
-  --action-text: #202419;
-  --sage: #30382A;
-  --clay: #3F3028;
-  --ochre: #3B3524;
-  --slate: #293438;
-  --focus: #BBC697;
+[data-palette="rosewater"] {
+  --page-bg: #F4E8E2;
+  --surface: #FCF4F0;
+  --text: #2B2422;
+  --muted: #61524D;
+  --border: #DCC8BE;
+  --action: #8A4B3C;
+  --action-text: #FCF4F0;
+  --sage: #E4E8DA;
+  --clay: #F2D8CC;
+  --ochre: #F0E0BC;
+  --slate: #DDE5E8;
+  --rose: #F2DADA;
+  --lilac: #E6DFF0;
+  --sky: #DCE8F2;
+  --stone: #E6E1D6;
+  --focus: #8A4B3C;
+}
+[data-palette="espresso"] {
+  --page-bg: #1E1A16;
+  --surface: #2A2520;
+  --text: #F1E8DA;
+  --muted: #BFB3A0;
+  --border: #4A4036;
+  --action: #D9B77E;
+  --action-text: #231C12;
+  --sage: #3A3A27;
+  --clay: #4A3326;
+  --ochre: #433718;
+  --slate: #2E393A;
+  --rose: #46302F;
+  --lilac: #3A3248;
+  --sky: #28394A;
+  --stone: #3A3732;
+  --focus: #D9B77E;
+}
+[data-palette="slate"] {
+  --page-bg: #14181F;
+  --surface: #1D232C;
+  --text: #E6EBF1;
+  --muted: #A9B4C2;
+  --border: #36414F;
+  --action: #8FB4D9;
+  --action-text: #0F1A26;
+  --sage: #26332F;
+  --clay: #3A2E2E;
+  --ochre: #3A3626;
+  --slate: #25384A;
+  --rose: #46302F;
+  --lilac: #3A3248;
+  --sky: #28394A;
+  --stone: #3A3732;
+  --focus: #8FB4D9;
+}
+[data-palette="forest"] {
+  --page-bg: #141C17;
+  --surface: #1D2822;
+  --text: #E8EFE6;
+  --muted: #AEBDB0;
+  --border: #34453A;
+  --action: #A6CFA0;
+  --action-text: #0F1F12;
+  --sage: #2A3D2B;
+  --clay: #3A302A;
+  --ochre: #38361F;
+  --slate: #263A3C;
+  --rose: #46302F;
+  --lilac: #3A3248;
+  --sky: #28394A;
+  --stone: #3A3732;
+  --focus: #A6CFA0;
 }

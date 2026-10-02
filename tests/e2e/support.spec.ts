@@ -18,7 +18,7 @@ for (const [api, removal] of Object.entries(REMOVALS)) {
     // No form that would collect a passphrase for a vault that cannot be stored or opened.
     await expect(page.getByLabel('Passphrase', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Create vault' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Add', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'New note', exact: true })).toHaveCount(0)
   })
 }
 
@@ -31,6 +31,6 @@ test('with every required API missing all of them are named, and nothing was sto
   // A plain same-origin file runs no app code, so it shows what storage the failed
   // attempt left behind: none.
   const probe = await page.context().newPage()
-  await probe.goto('/licenses/source-sans-3-OFL.txt')
+  await probe.goto('/licenses/public-sans-OFL.txt')
   expect(await probe.evaluate(async () => (await indexedDB.databases()).length)).toBe(0)
 })

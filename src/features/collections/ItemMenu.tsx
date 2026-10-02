@@ -11,7 +11,7 @@ export function ItemMenu({ item, onChoose, onClose }: { item: LibraryItem, onCho
   const name = item.kind === 'collection' ? item.title ?? '' : noteName(item)
   return <Dialog title={`Actions for ${name}`} className="organize-dialog" initialFocus=".item-menu button" onRequestClose={onClose} canClose={() => true}>
     <div className="item-menu">
-      {item.kind === 'collection' && <button type="button" onClick={() => onChoose('edit')}>Edit collection</button>}
+      {item.kind === 'collection' && <button type="button" onClick={() => onChoose('edit')}>Edit</button>}
       <button type="button" onClick={() => onChoose('move')}>Move</button>
       <button type="button" onClick={() => onChoose('delete')}>Delete</button>
     </div>

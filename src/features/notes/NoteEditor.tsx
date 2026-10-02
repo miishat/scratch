@@ -7,6 +7,7 @@ import { NoteConflictPanel } from './NoteConflictPanel'
 import { NoteReader } from './NoteReader'
 import { useNoteDraft, type EditorOutcome } from './useNoteDraft'
 import { useVisualViewport } from './useVisualViewport'
+import { clearEdit, wantsEdit } from './editIntent'
 
 export interface NoteEditorProps {
   // Collection a new note is created in; an existing note keeps its own parent.
@@ -46,7 +47,8 @@ export function NoteEditor({ onRecoveredUsed, recovered, ...props }: NoteEditorP
 
 function EditorSurface({ parentId, note, recovered, onClose, onReload }: Omit<NoteEditorProps, 'onRecoveredUsed'> & { onReload: () => Promise<void> }) {
   const library = useLibrary()
-  const [mode, setMode] = useState<'read' | 'edit'>(note && !recovered ? 'read' : 'edit')
+  const [mode, setMode] = useState<'read' | 'edit'>(note && !recovered && !wantsEdit(note.id) ? 'read' : 'edit')
+  useEffect(() => { if (note) clearEdit(note.id) }, [note])
   const [titleOpened, setTitleOpened] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)

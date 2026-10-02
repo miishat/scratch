@@ -28,7 +28,7 @@ export function useOrganize(announce: (message: string) => void) {
     const lost = !current || current === document.body || !document.body.contains(current)
     if (mode === 'add' || lost) {
       const tile = mode === 'lost' ? document.querySelector<HTMLElement>('.tile-link') : null
-      ;(tile ?? document.querySelector<HTMLElement>('.header-add'))?.focus()
+      ;(tile ?? document.querySelector<HTMLElement>(mode === 'add' ? '.header-add-collection' : '.header-add-note'))?.focus()
     }
   })
 

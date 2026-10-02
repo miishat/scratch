@@ -4,6 +4,75 @@ All notable changes to Scratch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Color schemes.** Settings now offers a color scheme for each theme. Light:
+  Parchment (new default), Classic (the original), and Rosewater. Dark:
+  Espresso (new default), Slate, and Forest. Each theme remembers its own
+  choice, only the schemes for the active theme are shown, and the choice is
+  applied before first paint.
+- **Card styles.** Settings has a Notes picker (Index Card, Paper Sheet, Sticky
+  Note, Quiet) and a Collections picker (Stacked, Classic, Folder Tab, Color
+  Edge), each with a drawn preview. Choices apply instantly and are saved.
+- **Logo.** A pencil mark beside the wordmark in the header and a matching
+  favicon, both with no background block.
+- **Edit button on notes.** Every note card has an Edit button that opens the
+  note straight in the editor instead of the reader.
+- **More collection colors.** Rose, Lilac, Sky, and Stone join Sage, Clay,
+  Ochre, and Slate, with contrast checked in all six schemes.
+- **Deployment.** A GitHub Actions workflow typechecks, lints, tests, and builds on
+  every push and pull request, and publishes to GitHub Pages from main. Notes on
+  setup and on security headers are in docs/deployment.md.
+- **Tests.** Contrast checks now cover every color scheme
+  and every collection color. New tests cover the pickers and the Edit button,
+  and the browser specs were updated for the + Note and + Collection buttons.
+
+### Changed
+
+- **Warmer light mode.** The default light scheme is a warm parchment instead
+  of near white. The original is still available as Classic.
+- **Typography.** Newsreader is used for the wordmark, titles, headings, and
+  note text, and Public Sans for controls and everything else. The Source Sans
+  and Source Serif fonts and their license files were replaced.
+- **Install colors.** The installed app's splash and theme colors match the new
+  parchment light scheme.
+- **Unlock and setup screens.** A centered card under the pencil logo and
+  wordmark, with the passphrase as a placeholder instead of a label. The Unlock
+  heading is kept for screen readers.
+- **Header buttons.** The Add menu is replaced by two buttons, + Note and
+  + Collection, both with the accent color.
+- **Note cards.** Cards use an index card layout: a title row with an accent
+  rule, the preview, and a footer with Edit, Copy, and the actions menu.
+- **Collection cards.** Collection cards are stacked by default. The Paper
+  Sheet fold takes its color from the active scheme's accent.
+- **Card buttons.** Buttons on note cards are smaller (32 px) and outlined in
+  the accent color. On collection cards the actions button is a notch in the
+  top-right corner, a deeper shade of the card's own color with white dots. It
+  appears on hover or focus and is always visible on touch screens.
+- **Settings.** Reorganized into Appearance, Security, and Backup with no
+  explanatory copy. Buttons are Lock Current Tab, Change Passphrase, Export,
+  and Import, and Lock Current Tab is now a plain button instead of looking
+  selected. The color heading reads Light Colors or Dark Colors.
+- **Collection page.** The current collection's name is shown once, in the
+  breadcrumb, with its actions button at the end of that row. The large heading
+  is kept for screen readers and for narrow screens.
+- **Secret note hint.** In the note editor, the Secret note description sits
+  beside the checkbox in a lighter italic serif instead of below it.
+- **Dialogs.** The backdrop is blurred. The close button is smaller and aligned
+  with the title. The collection actions menu says Edit instead of Edit
+  collection.
+- **Target sizes.** Card actions and the dialog close button are 32 px, above
+  the 24 px WCAG 2.2 AA minimum. Primary controls stay at 44 px.
+
+### Fixed
+
+- **Settings icon.** The gear is now a proper gear outline instead of a shape
+  that looked like an eye.
+- **Note title focus ring.** The highlight around the title field no longer
+  gets cut off in the editor.
+
 ## [0.1.0] - 2026-10-01
 
 First release: a local-first, encrypted notes app that runs in the

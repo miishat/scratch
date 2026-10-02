@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import { Logo } from '../../components/Logo'
 import type { LibrarySnapshot } from '../library/types'
 import { useVault } from './VaultProvider'
 import type { DraftContent } from './session'
@@ -53,22 +54,29 @@ function SetupScreen({ onImportBackup }: { onImportBackup?: () => void }) {
     }
   }
 
-  return <main className="support-screen vault-screen">
-    <h1>Set up Scratch</h1>
-    <p>Choose a passphrase to protect your notes on this device. It cannot be recovered if you forget it.</p>
-    <form className="vault-form" onSubmit={submit}>
-      <label htmlFor={phraseId}>Passphrase</label>
-      <input id={phraseId} type="password" autoComplete="new-password" autoFocus value={phrase} disabled={busy} onChange={(event) => setPhrase(event.target.value)} />
-      <label htmlFor={confirmId}>Confirm passphrase</label>
-      <input id={confirmId} type="password" autoComplete="new-password" value={confirm} disabled={busy} onChange={(event) => setConfirm(event.target.value)} />
-      {error && <p role="alert" className="form-error">{error}</p>}
-      {busy && <p role="status" aria-label="Creating vault">Creating vault</p>}
-      <div className="dialog-actions">
-        <button className="primary-button" type="submit" disabled={busy}>Create vault</button>
-        {onImportBackup && <button type="button" disabled={busy} onClick={onImportBackup}>Import backup</button>}
-      </div>
-    </form>
+  return <main className="support-screen vault-screen vault-entry">
+    <VaultBrand />
+    <div className="vault-card">
+      <h1>Set up Scratch</h1>
+      <p>Choose a passphrase to protect your notes on this device. It cannot be recovered if you forget it.</p>
+      <form className="vault-form" onSubmit={submit}>
+        <label className="visually-hidden" htmlFor={phraseId}>Passphrase</label>
+        <input id={phraseId} type="password" placeholder="Passphrase" autoComplete="new-password" autoFocus value={phrase} disabled={busy} onChange={(event) => setPhrase(event.target.value)} />
+        <label className="visually-hidden" htmlFor={confirmId}>Confirm passphrase</label>
+        <input id={confirmId} type="password" placeholder="Confirm passphrase" autoComplete="new-password" value={confirm} disabled={busy} onChange={(event) => setConfirm(event.target.value)} />
+        {error && <p role="alert" className="form-error">{error}</p>}
+        {busy && <p role="status" aria-label="Creating vault">Creating vault</p>}
+        <div className="dialog-actions">
+          <button className="primary-button" type="submit" disabled={busy}>Create vault</button>
+          {onImportBackup && <button type="button" disabled={busy} onClick={onImportBackup}>Import backup</button>}
+        </div>
+      </form>
+    </div>
   </main>
+}
+
+function VaultBrand() {
+  return <div className="vault-brand" aria-hidden="true"><Logo className="vault-logo" /><span>Scratch</span></div>
 }
 
 function UnlockScreen() {
@@ -84,18 +92,21 @@ function UnlockScreen() {
     await unlock(attempt)
   }
 
-  return <main className="support-screen vault-screen">
-    <h1>Unlock Scratch</h1>
-    {notice && <p role="status">{notice}</p>}
-    <form className="vault-form" onSubmit={submit}>
-      <label htmlFor={phraseId}>Passphrase</label>
-      <input id={phraseId} type="password" autoComplete="current-password" autoFocus value={phrase} disabled={unlocking} onChange={(event) => setPhrase(event.target.value)} />
-      {error && <p role="alert" className="form-error">{error}</p>}
-      {unlocking && <p role="status" aria-label="Unlocking">Unlocking</p>}
-      <div className="dialog-actions">
-        <button className="primary-button" type="submit" disabled={unlocking}>Unlock</button>
-      </div>
-    </form>
+  return <main className="support-screen vault-screen vault-entry">
+    <VaultBrand />
+    <div className="vault-card">
+      <h1 className="visually-hidden">Unlock Scratch</h1>
+      {notice && <p role="status">{notice}</p>}
+      <form className="vault-form" onSubmit={submit}>
+        <label className="visually-hidden" htmlFor={phraseId}>Passphrase</label>
+        <input id={phraseId} type="password" placeholder="Passphrase" autoComplete="current-password" autoFocus value={phrase} disabled={unlocking} onChange={(event) => setPhrase(event.target.value)} />
+        {error && <p role="alert" className="form-error">{error}</p>}
+        {unlocking && <p role="status" aria-label="Unlocking">Unlocking</p>}
+        <div className="dialog-actions">
+          <button className="primary-button" type="submit" disabled={unlocking}>Unlock</button>
+        </div>
+      </form>
+    </div>
   </main>
 }
 

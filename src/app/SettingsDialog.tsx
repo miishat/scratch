@@ -29,27 +29,25 @@ export function SettingsDialog({ onClose, onChangePassphrase, onImportBackup }: 
     saveBackupFile(result.blob, result.filename)
     setStatus('Backup exported.')
   }
-  return <Dialog title="Settings" onRequestClose={onClose} canClose={() => true}>
-    <section aria-labelledby="settings-security">
+  return <Dialog title="Settings" className="settings-dialog" onRequestClose={onClose} canClose={() => true}>
+    <ThemeSetting />
+    <section className="settings-section" aria-labelledby="settings-security">
       <h3 id="settings-security">Security</h3>
-      <p>Locking applies to this tab only. Other tabs stay unlocked until they lock.</p>
-      <div className="dialog-actions">
-        <button className="primary-button" type="button" onClick={lockNow}>Lock now</button>
-        <button type="button" disabled={hasDirtyDraft} aria-describedby={hasDirtyDraft ? 'settings-passphrase-hint' : undefined} onClick={onChangePassphrase}>Change passphrase</button>
+      <div className="settings-actions">
+        <button type="button" onClick={lockNow}>Lock Current Tab</button>
+        <button type="button" disabled={hasDirtyDraft} aria-describedby={hasDirtyDraft ? 'settings-passphrase-hint' : undefined} onClick={onChangePassphrase}>Change Passphrase</button>
       </div>
       {hasDirtyDraft && <p id="settings-passphrase-hint" className="form-hint">Save or discard your unsaved note before changing the passphrase.</p>}
     </section>
-    <section aria-labelledby="settings-backup">
+    <section className="settings-section" aria-labelledby="settings-backup">
       <h3 id="settings-backup">Backup</h3>
-      <p>Stored in this browser. Export a backup to keep a copy.</p>
-      <div className="dialog-actions">
-        <button type="button" disabled={exporting} onClick={() => void exportNow()}>Export backup</button>
-        <button type="button" disabled={hasDirtyDraft || exporting} aria-describedby={hasDirtyDraft ? 'settings-import-hint' : undefined} onClick={onImportBackup}>Import backup</button>
+      <div className="settings-actions">
+        <button type="button" disabled={exporting} aria-label="Export backup" onClick={() => void exportNow()}>Export</button>
+        <button type="button" disabled={hasDirtyDraft || exporting} aria-describedby={hasDirtyDraft ? 'settings-import-hint' : undefined} aria-label="Import backup" onClick={onImportBackup}>Import</button>
       </div>
       {hasDirtyDraft && <p id="settings-import-hint" className="form-hint">Save or discard the note you are writing before importing a backup.</p>}
       {status && <p role="status">{status}</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
     </section>
-    <ThemeSetting />
   </Dialog>
 }

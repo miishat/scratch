@@ -173,10 +173,9 @@ it('renders an SVG close icon with an accessible name', async () => {
 
 it('exposes reachable Add and Settings controls in the narrow shell', async () => {
   render(<ThemeProvider><AppShell onAddNote={() => {}} onAddCollection={() => {}} /></ThemeProvider>)
-  expect(screen.getByRole('button', { name: 'Add' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'New note' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Settings' })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Add note' })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Add collection' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'New collection' })).toBeVisible()
 })
 
 it('lists missing required browser APIs and shows them on the unsupported screen', () => {
@@ -192,7 +191,7 @@ it('gates the shell when a required API is missing', () => {
   render(<ThemeProvider><App /></ThemeProvider>)
   expect(screen.getByRole('heading', { name: 'Browser not supported' })).toBeInTheDocument()
   expect(screen.getByText(/IndexedDB/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'New note' })).not.toBeInTheDocument()
 })
 
 it('offers a retry when browser storage is unavailable', async () => {
@@ -258,5 +257,67 @@ describe('dialog focus containment with radio groups', () => {
     close.focus()
     fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
     expect(screen.getByRole('radio', { name: 'Two' })).toHaveFocus()
+  })
+})
+
+describe('color schemes in Settings', () => {
+  it('defaults to Parchment in light and Espresso in dark, and the bootstrap agrees', () => {
+    window.eval(readFileSync('public/theme-init.js', 'utf8'))
+    expect(document.documentElement).toHaveAttribute('data-palette', 'espresso')
+    dark = false
+    window.eval(readFileSync('public/theme-init.js', 'utf8'))
+    expect(document.documentElement).toHaveAttribute('data-palette', 'parchment')
+  })
+
+  it('shows only the schemes of the active mode, applies and saves a choice per mode', async () => {
+    const user = userEvent.setup()
+    dark = false
+    render(<ThemeProvider><ThemeSetting /></ThemeProvider>)
+    const light = screen.getByRole('radiogroup', { name: 'Light Colors' })
+    expect(screen.queryByRole('radiogroup', { name: 'Dark Colors' })).not.toBeInTheDocument()
+    expect(within(light).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['parchment', 'classic', 'rosewater'])
+    await user.click(within(light).getByRole('radio', { name: 'Classic' }))
+    expect(document.documentElement.dataset.palette).toBe('classic')
+    expect(localStorage.getItem('scratch-light-palette')).toBe('classic')
+    await user.click(screen.getByRole('radio', { name: 'Dark' }))
+    const darkGroup = screen.getByRole('radiogroup', { name: 'Dark Colors' })
+    expect(screen.queryByRole('radiogroup', { name: 'Light Colors' })).not.toBeInTheDocument()
+    expect(within(darkGroup).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['espresso', 'slate', 'forest'])
+    await user.click(within(darkGroup).getByRole('radio', { name: 'Slate' }))
+    expect(document.documentElement.dataset.palette).toBe('slate')
+    await user.click(screen.getByRole('radio', { name: 'Light' }))
+    expect(document.documentElement.dataset.palette).toBe('classic')
+  })
+
+  it('ignores an unknown saved palette', () => {
+    localStorage.setItem('scratch-dark-palette', 'neon')
+    window.eval(readFileSync('public/theme-init.js', 'utf8'))
+    expect(document.documentElement).toHaveAttribute('data-palette', 'espresso')
+  })
+})
+
+describe('card styles in Settings', () => {
+  it('offers note and collection styles, applies them to the page, and saves them', async () => {
+    const user = userEvent.setup()
+    render(<ThemeProvider><ThemeSetting /></ThemeProvider>)
+    expect(document.documentElement.dataset.noteStyle).toBe('index')
+    expect(document.documentElement.dataset.collectionStyle).toBe('stacked')
+    const notes = screen.getByRole('radiogroup', { name: 'Notes' })
+    const collections = screen.getByRole('radiogroup', { name: 'Collections' })
+    expect(within(notes).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['index', 'paper', 'sticky', 'quiet'])
+    expect(within(collections).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['stacked', 'classic', 'tab', 'edge'])
+    await user.click(within(notes).getByRole('radio', { name: 'Paper Sheet' }))
+    await user.click(within(collections).getByRole('radio', { name: 'Folder Tab' }))
+    expect(document.documentElement.dataset.noteStyle).toBe('paper')
+    expect(document.documentElement.dataset.collectionStyle).toBe('tab')
+    expect(localStorage.getItem('scratch-note-style')).toBe('paper')
+    expect(localStorage.getItem('scratch-collection-style')).toBe('tab')
+  })
+
+  it('falls back to the defaults for an unknown saved style', () => {
+    localStorage.setItem('scratch-note-style', 'neon')
+    window.eval(readFileSync('public/theme-init.js', 'utf8'))
+    expect(document.documentElement.dataset.noteStyle).toBe('index')
+    expect(document.documentElement.dataset.collectionStyle).toBe('stacked')
   })
 })

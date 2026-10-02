@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app/App'
@@ -213,7 +213,7 @@ describe('replacement from Settings', () => {
 
     // Lock and unlock: only the imported passphrase works now.
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    await user.click(screen.getByRole('button', { name: 'Lock now' }))
+    await user.click(screen.getByRole('button', { name: 'Lock Current Tab' }))
     await user.type(await screen.findByLabelText('Passphrase'), PHRASE)
     await user.click(screen.getByRole('button', { name: 'Unlock' }))
     expect(await screen.findByRole('alert', undefined, { timeout: 30000 })).toBeInTheDocument()
@@ -267,8 +267,7 @@ describe('replacement from Settings', () => {
     const user = userEvent.setup()
     render(<App />)
     await unlock(user)
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getByRole('button', { name: 'New note' }))
     await user.type(screen.getByRole('textbox', { name: 'Note body' }), 'unsaved words')
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('button', { name: 'Import backup' })).toBeDisabled()
@@ -289,7 +288,6 @@ describe('export from Settings', () => {
     render(<App />)
     await unlock(user)
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(screen.getByText('Stored in this browser. Export a backup to keep a copy.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Export backup' }))
     expect(await screen.findByText('Backup exported.')).toBeInTheDocument()
     expect(blobs).toHaveLength(1)
@@ -310,8 +308,7 @@ describe('stale tab recovery export', () => {
     const user = userEvent.setup()
     render(<App />)
     await unlock(user)
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getByRole('button', { name: 'New note' }))
     await user.type(screen.getByRole('textbox', { name: 'Note body' }), 'draft only in this tab')
 
     // Another tab replaces the whole library.
@@ -338,8 +335,7 @@ describe('stale tab recovery export', () => {
     await seedLibrary()
     render(<App />)
     await unlock(user)
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getByRole('button', { name: 'New note' }))
     await user.type(screen.getByRole('textbox', { name: 'Note body' }), 'x')
     await user.click(screen.getByRole('checkbox', { name: /secret/i }))
     const state = await stored()
@@ -504,8 +500,7 @@ describe('dialogs survive concealing', () => {
     const user = userEvent.setup()
     render(<App />)
     await unlock(user)
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(within(document.querySelector<HTMLElement>('.add-menu')!).getByRole('button', { name: 'Add collection' }))
+    await user.click(screen.getByRole('button', { name: 'New collection' }))
     await user.type(await screen.findByLabelText('Title'), 'Travel plans')
     try {
       setHidden(true)
