@@ -389,7 +389,7 @@ describe('stale tab recovery export', () => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
       act(() => { document.dispatchEvent(new Event('visibilitychange')) })
-      act(() => { vi.advanceTimersByTime(61_000) })
+      act(() => { vi.advanceTimersByTime(601_000) })
     } finally {
       vi.useRealTimers()
       delete (document as unknown as Record<string, unknown>).hidden
@@ -402,7 +402,7 @@ describe('stale tab recovery export', () => {
     expect(screen.getByRole('textbox', { name: 'Note body', hidden: true })).toHaveValue('x')
   })
 
-  it('restores the editor after Keep editing even when the tab was hidden past sixty seconds', async () => {
+  it('restores the editor after Keep editing even when the tab was hidden past ten minutes', async () => {
     const blobs: Blob[] = []
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn((blob: Blob) => { blobs.push(blob); return 'blob:late' }), revokeObjectURL: vi.fn() }))
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
@@ -415,7 +415,7 @@ describe('stale tab recovery export', () => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
       act(() => { document.dispatchEvent(new Event('visibilitychange')) })
-      act(() => { vi.advanceTimersByTime(61_000) })
+      act(() => { vi.advanceTimersByTime(601_000) })
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
       act(() => { document.dispatchEvent(new Event('visibilitychange')) })
@@ -521,7 +521,7 @@ describe('dialogs survive concealing', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     try {
       setHidden(true)
-      act(() => { vi.advanceTimersByTime(61_000) })
+      act(() => { vi.advanceTimersByTime(601_000) })
     } finally {
       vi.useRealTimers()
       resetVisibility()

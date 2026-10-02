@@ -313,7 +313,7 @@ describe('vault session lifecycle', () => {
     expect(sessionStorage.length).toBe(0)
   })
 
-  it('locks before any plaintext appears when a hidden tab resumes past sixty seconds', async () => {
+  it('locks before any plaintext appears when a hidden tab resumes past ten minutes', async () => {
     await seedLibrary()
     const user = typing()
     renderApp()
@@ -322,7 +322,7 @@ describe('vault session lifecycle', () => {
     transitionVisibility(true)
     expect(renderLog.at(-1)?.concealed).toBe(true)
     const markAfterHide = renderLog.length
-    jumpClock(61_000)
+    jumpClock(10 * MINUTE + 1000)
     transitionVisibility(false)
     await until(() => expectUnlockScreen())
     const resumed = renderLog.slice(markAfterHide)
@@ -343,19 +343,19 @@ describe('vault session lifecycle', () => {
     expect(renderLog.at(-1)?.concealed).toBe(false)
 
     transitionVisibility(true)
-    advance(60_000)
+    advance(10 * MINUTE)
     await until(() => expectUnlockScreen())
   })
 
-  it('locks after ten minutes without activity and extends the deadline on activity', async () => {
+  it('locks after thirty minutes without activity and extends the deadline on activity', async () => {
     await seedLibrary()
     const user = typing()
     renderApp()
     await unlockAndWaitForLibrary(user)
 
-    advance(9 * MINUTE)
+    advance(29 * MINUTE)
     fireEvent.keyDown(document, { key: 'a' })
-    advance(9 * MINUTE)
+    advance(29 * MINUTE)
     expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
     advance(MINUTE + 1000)
     await until(() => expectUnlockScreen())
@@ -368,7 +368,7 @@ describe('vault session lifecycle', () => {
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
 
-    advance(10 * MINUTE + 1000)
+    advance(30 * MINUTE + 1000)
     await until(() => expectUnlockScreen())
     expect(document.body.textContent).not.toContain(DRAFT_TEXT)
 
@@ -391,7 +391,7 @@ describe('vault session lifecycle', () => {
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
 
-    advance(10 * MINUTE + 1000)
+    advance(30 * MINUTE + 1000)
     await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
     expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
     expect(screen.queryByText(/^Locked$/)).not.toBeInTheDocument()
@@ -411,7 +411,7 @@ describe('vault session lifecycle', () => {
     renderApp(true)
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
-    advance(10 * MINUTE + 1000)
+    advance(30 * MINUTE + 1000)
     await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Save draft and lock' }))
     await until(() => expectUnlockScreen())
@@ -541,7 +541,7 @@ describe('changes from another tab', () => {
       expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT)
       expect(spies.discard).not.toHaveBeenCalled()
       // The normal lock path still applies: the draft is sealed and comes back.
-      advance(10 * MINUTE + 1000)
+      advance(30 * MINUTE + 1000)
       await until(() => expectUnlockScreen())
       await unlockThroughUi(user, NEW_PASSPHRASE)
       await until(() => expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT))
@@ -598,9 +598,9 @@ describe('session hardening', () => {
     await openRemoteRecovery(user)
 
     transitionVisibility(true)
-    jumpClock(61_000)
+    jumpClock(10 * MINUTE + 1000)
     transitionVisibility(false)
-    advance(11 * MINUTE)
+    advance(31 * MINUTE)
     await act(async () => {
       await new Promise<void>((resolve) => realSetTimeout(resolve, 50))
     })
@@ -633,7 +633,7 @@ describe('session hardening', () => {
   it('lets the draft be discarded without a passphrase after the deadline', async () => {
     const user = typing()
     await openRemoteRecovery(user)
-    advance(11 * MINUTE)
+    advance(31 * MINUTE)
     await until(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled())
     await user.click(screen.getByRole('button', { name: 'Discard draft and reload' }))
     await until(() => expectUnlockScreen())
@@ -646,7 +646,7 @@ describe('session hardening', () => {
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByLabelText('Draft')).toBeVisible()
     expect(screen.getByLabelText('Draft')).toHaveValue(DRAFT_TEXT)
-    advance(11 * MINUTE)
+    advance(31 * MINUTE)
     await until(() => expect(screen.getByRole('heading', { name: 'This library changed in another tab' })).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Keep editing' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled()
@@ -664,7 +664,7 @@ describe('session hardening', () => {
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
     readFails = true
-    advance(10 * MINUTE + 1000)
+    advance(30 * MINUTE + 1000)
     await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
     expect(screen.queryByRole('heading', { name: 'Unlock Scratch' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Discard draft and lock' }))
@@ -692,7 +692,7 @@ describe('session hardening', () => {
     renderApp(true)
     await unlockAndWaitForLibrary(user)
     await typeDraft(user)
-    advance(10 * MINUTE + 1000)
+    advance(30 * MINUTE + 1000)
     await until(() => expect(screen.getByRole('heading', { name: 'Could not lock Scratch' })).toBeInTheDocument())
     const button = screen.getByRole('button', { name: 'Save draft and lock' })
     await user.click(button)

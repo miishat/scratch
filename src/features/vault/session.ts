@@ -4,8 +4,8 @@ import type { VaultSession } from './types'
 // Session timing and the dirty-draft contract. Locking is current-tab only: it
 // releases this tab's in-memory session and never touches other tabs or storage.
 
-export const INACTIVITY_LOCK_MS = 10 * 60 * 1000
-export const HIDDEN_LOCK_MS = 60 * 1000
+export const INACTIVITY_LOCK_MS = 30 * 60 * 1000
+export const HIDDEN_LOCK_MS = 10 * 60 * 1000
 
 export type VaultState = 'setup' | 'locked' | 'unlocking' | 'unlocked' | 'lock-error'
 
