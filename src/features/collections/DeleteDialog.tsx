@@ -80,6 +80,7 @@ export function DeleteDialog({ item, onClose }: { item: LibraryItem, onClose: (r
   return <Dialog
     title={heading}
     className="organize-dialog"
+    hideClose
     initialFocus="[data-autofocus]"
     onRequestClose={() => onClose('closed')}
     canClose={() => !busy.current}
