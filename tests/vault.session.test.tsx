@@ -86,6 +86,7 @@ afterEach(async () => {
   delete (document as unknown as Record<string, unknown>).visibilityState
   await closeDatabase()
   await deleteDatabase(dbName)
+  await deleteDatabase(`${dbName}-device`)
   resetRepositoryForTests()
   localStorage.clear()
   sessionStorage.clear()
@@ -730,5 +731,52 @@ describe('session hardening', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Update passphrase' }))
     await until(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Could not change the passphrase. Try again.'))
     expect(within(dialog).getByRole('alert')).not.toHaveTextContent('incorrect')
+  })
+})
+
+describe('passphrase on this device', () => {
+  async function toggleAsk(user: ReturnType<typeof typing>): Promise<void> {
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    const box = screen.getByRole('checkbox', { name: 'Ask for passphrase when Scratch opens' })
+    const before = (box as HTMLInputElement).checked
+    await user.click(box)
+    await until(() => expect(screen.getByRole('checkbox', { name: 'Ask for passphrase when Scratch opens' })).toHaveProperty('checked', !before))
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+  }
+
+  it('opens without the passphrase once it is turned off, and asks again once it is back on', async () => {
+    await seedLibrary()
+    const user = typing()
+    const first = renderApp()
+    await unlockAndWaitForLibrary(user)
+    await toggleAsk(user)
+    first.unmount()
+
+    const second = renderApp()
+    await until(() => expect(screen.getByText(NOTE_TITLE)).toBeInTheDocument())
+    expect(vi.mocked(crypto_.unlockVault)).toHaveBeenCalledTimes(1)
+    // No automatic lock while the passphrase is off.
+    advance(31 * MINUTE)
+    expect(screen.getByText(NOTE_TITLE)).toBeInTheDocument()
+    await toggleAsk(user)
+    second.unmount()
+
+    renderApp()
+    await until(() => expectUnlockScreen())
+    expect(screen.queryByText(NOTE_TITLE)).not.toBeInTheDocument()
+  })
+})
+
+describe('Enter in passphrase fields', () => {
+  it('moves from the first setup field to an empty confirmation instead of submitting', async () => {
+    const user = typing()
+    renderApp()
+    await until(() => screen.getByLabelText('Passphrase'))
+    const phrase = screen.getByLabelText('Passphrase')
+    await user.type(phrase, PASSPHRASE)
+    fireEvent.keyDown(phrase, { key: 'Enter' })
+    expect(screen.getByLabelText('Confirm passphrase')).toHaveFocus()
+    expect(phrase).toHaveValue(PASSPHRASE)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

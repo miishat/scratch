@@ -14,6 +14,7 @@ import { subscribeToChanges } from '../library/changes'
 import { validatePassphrase } from '../library/validation'
 import { StorageUnavailableScreen } from '../support/SupportScreens'
 import { createVault, openEnvelope, rewrapVault, sealEnvelope, unlockVault } from './crypto'
+import { deviceKeyMatches, forgetDeviceKey, readDeviceKey, saveDeviceKey } from './deviceKey'
 import {
   decodeDraft,
   encodeDraft,
@@ -30,9 +31,10 @@ import {
 } from './session'
 import type { VaultSession } from './types'
 
-// The vault session lives only in React state and refs. Nothing here writes a key,
-// passphrase, or decrypted draft to storage, and passphrases are never retained
-// after a call returns. Locking is current-tab only.
+// The vault session lives only in React state and refs. Nothing here writes a
+// passphrase or decrypted draft to storage, and passphrases are never retained
+// after a call returns. The data key is written only when the person turns off
+// the passphrase for this device (see deviceKey.ts). Locking is current-tab only.
 
 export interface LockPromptState {
   saving: boolean
@@ -61,6 +63,10 @@ export interface VaultContextValue {
   unlockRemote: (passphrase: string) => Promise<ActionResult>
   lockPrompt: LockPromptState | null
   lockErrorMessage: string | null
+  // True when this device opens the library without asking for the passphrase.
+  // Automatic locking is off while it is set.
+  remembered: boolean
+  setRemembered: (on: boolean) => Promise<ActionResult>
   create: (passphrase: string) => Promise<ActionResult>
   unlock: (passphrase: string) => Promise<ActionResult>
   requestLock: () => void
@@ -109,6 +115,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   const [lockPrompt, setLockPrompt] = useState<LockPromptState | null>(null)
   const [lockErrorMessage, setLockErrorMessage] = useState<string | null>(null)
   const [lockNotice, setLockNotice] = useState<string | null>(null)
+  const [remembered, setRememberedState] = useState(false)
 
   const stateRef = useRef<VaultState>('locked')
   const sessionRef = useRef<VaultSession | null>(null)
@@ -127,6 +134,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
   // Bumped whenever the session ends or an unlock begins, so a slow unlock or
   // header check can never act after the situation it started in has changed.
   const epoch = useRef(0)
+  // Mirrors remembered so a new session can refresh the stored key.
+  const rememberedRef = useRef(false)
 
   const setRemoteLocked = useCallback((next: boolean): void => {
     remoteLockedRef.current = next
@@ -145,7 +154,25 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       setBoot('unavailable')
       return
     }
-    setState(stored.library === 'absent' ? 'setup' : 'locked')
+    if (stored.library === 'absent') {
+      setState('setup')
+      setBoot('ready')
+      return
+    }
+    // With the passphrase off for this device, open straight into the library. A
+    // key left over from a replaced library is kept as the setting but not used.
+    const device = await readDeviceKey()
+    rememberedRef.current = device !== null
+    setRememberedState(device !== null)
+    if (device && deviceKeyMatches(device, stored.header.header.vaultId, stored.header.meta.generation)) {
+      const opened: VaultSession = { header: stored.header.header, generation: stored.header.meta.generation, dataKey: device.dataKey }
+      sessionRef.current = opened
+      lastActivity.current = Date.now()
+      setSession(opened)
+      setState('unlocked')
+    } else {
+      setState('locked')
+    }
     setBoot('ready')
   }, [setState])
 
@@ -189,6 +216,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       setRemoteLockedState(false)
       sessionRef.current = next
       lastActivity.current = Date.now()
+      // A library imported or replaced since has a new key or generation.
+      if (rememberedRef.current) void saveDeviceKey(next)
       setSession(next)
       setRecoveredDraft(recovered)
       setConcealed(false)
@@ -467,6 +496,19 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     return { ok: true }
   }, [])
 
+  const setRemembered = useCallback(async (on: boolean): Promise<ActionResult> => {
+    if (on) {
+      const active = sessionRef.current
+      if (!active || stateRef.current !== 'unlocked') return { ok: false, message: 'Scratch is locked.' }
+      if (!(await saveDeviceKey(active))) return { ok: false, message: 'This browser could not remember the key.' }
+    } else if (!(await forgetDeviceKey())) {
+      return { ok: false, message: 'Could not forget the key on this device.' }
+    }
+    rememberedRef.current = on
+    setRememberedState(on)
+    return { ok: true }
+  }, [])
+
   const installSession = useCallback(
     (next: VaultSession, from: VaultSession | null): boolean => {
       if (stateRef.current !== 'setup' && stateRef.current !== 'unlocked') return false
@@ -490,9 +532,10 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
     [startSession],
   )
 
-  // Inactivity and visibility deadlines apply only while unlocked.
+  // Inactivity and visibility deadlines apply only while unlocked, and not at all
+  // with the passphrase off for this device, where locking would only ask for it.
   useEffect(() => {
-    if (state !== 'unlocked') return
+    if (state !== 'unlocked' || remembered) return
     let inactivityTimer: ReturnType<typeof setTimeout> | undefined
     let hiddenTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -547,7 +590,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('focus', onFocus)
     }
-  }, [state, lockQuietly, remoteLocked])
+  }, [state, lockQuietly, remoteLocked, remembered])
 
   // Another tab replaced the vault, or changed its header (passphrase change).
   // Item-only changes leave the header intact and are handled by the library.
@@ -600,6 +643,8 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       unlockRemote,
       lockPrompt,
       lockErrorMessage,
+      remembered,
+      setRemembered,
       create,
       unlock,
       requestLock,
@@ -621,7 +666,7 @@ export function VaultProvider({ children }: { children: ReactNode }): ReactNode 
       state, session, concealed, error, notice, recoveredDraft, clearRecoveredDraft, hasDirtyDraft,
       remoteReplacement, remoteLocked, unlockRemote, lockPrompt, lockErrorMessage, create, unlock, requestLock, automaticLock,
       changePassphrase, installSession, registerDraft, readDraft, saveDraft, discardDraft, cancelDraft, saveAndLock, discardAndLock, cancelLock, discardDraftAndReload,
-      keepEditing,
+      keepEditing, remembered, setRemembered,
     ],
   )
 

@@ -8,6 +8,10 @@ All notable changes to Scratch are recorded here. The format follows
 
 ### Added
 
+- **Open without the passphrase.** Settings > Security has "Ask for passphrase
+  when Scratch opens". Turning it off keeps the library's key on this device
+  (never the passphrase) so Scratch opens straight to your notes, and turns off
+  automatic locking. Turning it back on forgets the key.
 - **Color schemes.** Settings now offers a color scheme for each theme. Light:
   Parchment (new default), Classic (the original), and Rosewater. Dark:
   Espresso (new default), Slate, and Forest. Each theme remembers its own
@@ -81,6 +85,9 @@ All notable changes to Scratch are recorded here. The format follows
 
 ### Fixed
 
+- **Enter in passphrase fields.** Enter in the first field of setup or Change
+  passphrase now moves to the next empty field instead of submitting a
+  half-filled form, which reported a mismatch and cleared what was typed.
 - **Settings icon.** The gear is now a proper gear outline instead of a shape
   that looked like an eye.
 - **Note title focus ring.** The highlight around the title field no longer

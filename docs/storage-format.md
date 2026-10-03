@@ -167,7 +167,7 @@ deliberate clipboard copy still exposes usable plaintext. JavaScript memory
 cannot be guaranteed to be securely erased; Scratch releases references and
 clears UI state rather than claiming zeroization.
 
-Locking is per tab. A reload always begins locked; another unlocked tab holds
+Locking is per tab. A reload begins locked unless the passphrase is turned off for the device (see below); another unlocked tab holds
 its own session and timer. Exported backups retain the passphrase they were
 exported with, so changing the passphrase does not change an old backup's
 passphrase.
@@ -198,6 +198,20 @@ in-memory header; nothing is written). Discard never needs it. The same applies
 if a deadline passes after Keep editing: the panel returns locked and the draft
 is never dropped. Saving after Keep editing still meets the replaced-library
 refusal.
+
+### Skipping the passphrase on a device
+
+Settings > Security has "Ask for passphrase when Scratch opens", on by default.
+Turning it off stores this tab's nonextractable data key, as a `CryptoKey`
+object, with the vault id and generation in a separate IndexedDB database named
+after the library database plus `-device`. The library database and backups are
+unchanged, and the passphrase itself is never stored. On open, a stored key whose
+vault id and generation match the stored header opens the library directly; a
+key left from a replaced library is not used, and the next unlock with the
+passphrase stores the current one. Automatic locking (the inactivity and hidden
+deadlines) is off while the setting is off, and Lock Current Tab still works for
+that tab until the next open. Anyone who can open this browser profile can read
+the library while the setting is off. Turning it back on deletes the stored key.
 
 ## Offline cache
 

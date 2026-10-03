@@ -195,6 +195,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, [tabindex]:focus-vis
 .settings-section h3 { margin: 0 0 4px; font: 600 21px/1.25 'Newsreader', Georgia, serif; }
 .settings-field { margin-top: 16px; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.settings-check { display: flex; align-items: center; gap: 10px; margin-top: 16px; min-height: 44px; font-weight: 600; cursor: pointer; }
+.settings-check input { width: 20px; height: 20px; margin: 0; flex: none; }
 .settings-label { margin: 0 0 6px; font-weight: 600; }
 .segmented { display: inline-flex; border: 1px solid var(--focus); border-radius: 10px; overflow: hidden; }
 .segmented:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 3px; }

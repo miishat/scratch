@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { Dialog } from '../../components/Dialog'
+import { advanceOnEnter } from './advanceOnEnter'
 import { useVault } from './VaultProvider'
 
 export function ChangePassphraseDialog({ onClose }: { onClose: () => void }) {
@@ -38,9 +39,9 @@ export function ChangePassphraseDialog({ onClose }: { onClose: () => void }) {
   return <Dialog title="Change passphrase" onRequestClose={onClose} canClose={() => !busy}>
     <form className="vault-form" onSubmit={submit}>
       <label htmlFor={currentId}>Current passphrase</label>
-      <input id={currentId} type="password" autoComplete="current-password" value={current} disabled={busy} onChange={(event) => setCurrent(event.target.value)} />
+      <input id={currentId} type="password" autoComplete="current-password" value={current} disabled={busy} onKeyDown={advanceOnEnter} onChange={(event) => setCurrent(event.target.value)} />
       <label htmlFor={nextId}>New passphrase</label>
-      <input id={nextId} type="password" autoComplete="new-password" value={next} disabled={busy} onChange={(event) => setNext(event.target.value)} />
+      <input id={nextId} type="password" autoComplete="new-password" value={next} disabled={busy} onKeyDown={advanceOnEnter} onChange={(event) => setNext(event.target.value)} />
       <label htmlFor={confirmId}>Confirm new passphrase</label>
       <input id={confirmId} type="password" autoComplete="new-password" value={confirm} disabled={busy} onChange={(event) => setConfirm(event.target.value)} />
       {error && <p role="alert" className="form-error">{error}</p>}

@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react'
 import { Logo } from '../../components/Logo'
 import type { LibrarySnapshot } from '../library/types'
+import { advanceOnEnter } from './advanceOnEnter'
 import { useVault } from './VaultProvider'
 import type { DraftContent } from './session'
 import type { VaultSession } from './types'
@@ -62,7 +63,7 @@ function SetupScreen({ onImportBackup }: { onImportBackup?: () => void }) {
       <form className="vault-form" onSubmit={submit}>
         <input className="visually-hidden" type="text" name="username" value="Scratch" autoComplete="username" readOnly tabIndex={-1} aria-hidden="true" />
         <label className="visually-hidden" htmlFor={phraseId}>Passphrase</label>
-        <input id={phraseId} type="password" placeholder="Passphrase" autoComplete="new-password" autoFocus value={phrase} disabled={busy} onChange={(event) => setPhrase(event.target.value)} />
+        <input id={phraseId} type="password" placeholder="Passphrase" autoComplete="new-password" autoFocus value={phrase} disabled={busy} onKeyDown={advanceOnEnter} onChange={(event) => setPhrase(event.target.value)} />
         <label className="visually-hidden" htmlFor={confirmId}>Confirm passphrase</label>
         <input id={confirmId} type="password" placeholder="Confirm passphrase" autoComplete="new-password" value={confirm} disabled={busy} onChange={(event) => setConfirm(event.target.value)} />
         {error && <p role="alert" className="form-error">{error}</p>}
